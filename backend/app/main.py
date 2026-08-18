@@ -1,7 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app import models
+from app.bitcoin_rpc import BitcoinRpcError
 from app.config import Settings
 from app.db import Base, engine
 from app.routers import health, users
@@ -18,6 +20,11 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.exception_handler(BitcoinRpcError)
+    def bitcoin_rpc_error_handler(request: Request, exc: BitcoinRpcError):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
+
     app.include_router(health.router)
     app.include_router(users.router)
     return app
