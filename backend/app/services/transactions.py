@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from app.bitcoin_rpc import BitcoinRpcClient, btc_to_sats
-from app.schemas import FaucetRead, FaucetRequest, SendTransactionRead, SendTransactionRequest
+from app.schemas import FaucetRead, FaucetRequest, SendTransactionRead, SendTransactionRequest, TransactionRead
 
 
 def format_btc(amount: Decimal) -> str:
@@ -33,3 +33,25 @@ def fund_from_faucet(wallet_name: str, payload: FaucetRequest) -> FaucetRead:
         amount_sats=btc_to_sats(payload.amount_btc),
         block_hashes=block_hashes,
     )
+
+
+def list_transactions(wallet_name: str) -> list[TransactionRead]:
+    rows = BitcoinRpcClient().list_transactions(wallet_name, count=20)
+    transactions: list[TransactionRead] = []
+    for row in rows:
+        amount = Decimal(str(row["amount"]))
+        confirmations = int(row.get("confirmations", 0))
+        transactions.append(
+            TransactionRead(
+                txid=row["txid"],
+                category=row["category"],
+                amount_btc=format_btc(amount),
+                amount_sats=btc_to_sats(amount),
+                confirmations=confirmations,
+                status="confirmed" if confirmations > 0 else "pending",
+                time=row.get("time"),
+                blockhash=row.get("blockhash"),
+                address=row.get("address"),
+            )
+        )
+    return transactions

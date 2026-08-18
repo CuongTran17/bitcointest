@@ -57,3 +57,26 @@ class FaucetRead(BaseModel):
     amount_btc: str
     amount_sats: int
     block_hashes: list[str]
+
+
+class MineBlocksRequest(BaseModel):
+    wallet_name: str = Field(default="miner", min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_-]+$")
+    block_count: int = Field(default=1, ge=1, le=101)
+
+
+class MineBlocksRead(BaseModel):
+    wallet_name: str
+    block_count: int
+    block_hashes: list[str]
+
+
+class TransactionRead(BaseModel):
+    txid: str
+    category: str
+    amount_btc: str
+    amount_sats: int
+    confirmations: int
+    status: str
+    time: int | None = None
+    blockhash: str | None = None
+    address: str | None = None

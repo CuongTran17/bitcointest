@@ -59,3 +59,59 @@ def test_faucet_funds_wallet_and_mines_confirmation(client: TestClient, monkeypa
         "amount_sats": 1000000000,
         "block_hashes": ["blockhash1"],
     }
+
+
+def test_list_transactions_returns_status_and_metadata(client: TestClient, monkeypatch):
+    class FakeRpc:
+        def list_transactions(self, wallet: str, count: int = 20):
+            assert wallet == "alice"
+            assert count == 20
+            return [
+                {
+                    "txid": "tx1",
+                    "category": "send",
+                    "amount": "-2.00000000",
+                    "confirmations": 1,
+                    "address": "bcrt1qbobaddress",
+                    "time": 1787030000,
+                    "blockhash": "blockhash1",
+                },
+                {
+                    "txid": "tx2",
+                    "category": "receive",
+                    "amount": "1.00000000",
+                    "confirmations": 0,
+                    "address": "bcrt1qaliceaddress",
+                    "time": 1787030100,
+                },
+            ]
+
+    monkeypatch.setattr("app.services.transactions.BitcoinRpcClient", lambda: FakeRpc())
+
+    response = client.get("/transactions/alice")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "txid": "tx1",
+            "category": "send",
+            "amount_btc": "-2.00000000",
+            "amount_sats": -200000000,
+            "confirmations": 1,
+            "status": "confirmed",
+            "time": 1787030000,
+            "blockhash": "blockhash1",
+            "address": "bcrt1qbobaddress",
+        },
+        {
+            "txid": "tx2",
+            "category": "receive",
+            "amount_btc": "1.00000000",
+            "amount_sats": 100000000,
+            "confirmations": 0,
+            "status": "pending",
+            "time": 1787030100,
+            "blockhash": None,
+            "address": "bcrt1qaliceaddress",
+        },
+    ]

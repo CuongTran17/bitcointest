@@ -66,3 +66,7 @@ class BitcoinRpcClient:
     def mine_blocks(self, wallet: str, block_count: int) -> list[str]:
         address = self.get_new_address(wallet)
         return self.call("generatetoaddress", [block_count, address])
+
+    def list_transactions(self, wallet: str, count: int = 20) -> list[dict[str, Any]]:
+        self.ensure_wallet_loaded(wallet)
+        return self.call("listtransactions", ["*", count], wallet=wallet)
