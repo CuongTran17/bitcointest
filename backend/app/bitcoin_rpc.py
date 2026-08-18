@@ -41,3 +41,20 @@ class BitcoinRpcClient:
 
     def get_blockchain_info(self) -> dict[str, Any]:
         return self.call("getblockchaininfo")
+
+    def list_wallets(self) -> list[str]:
+        return self.call("listwallets")
+
+    def ensure_wallet_loaded(self, wallet: str) -> None:
+        if wallet not in self.list_wallets():
+            raise BitcoinRpcError(f"Bitcoin wallet '{wallet}' is not loaded", status_code=404)
+
+    def get_new_address(self, wallet: str) -> str:
+        self.ensure_wallet_loaded(wallet)
+        return self.call("getnewaddress", wallet=wallet)
+
+    def get_balances(self, wallet: str) -> dict[str, Decimal]:
+        self.ensure_wallet_loaded(wallet)
+        confirmed = Decimal(str(self.call("getbalance", ["*", 1], wallet=wallet)))
+        total = Decimal(str(self.call("getbalance", ["*", 0], wallet=wallet)))
+        return {"confirmed": confirmed, "unconfirmed": total - confirmed, "total": total}

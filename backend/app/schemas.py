@@ -12,3 +12,18 @@ class UserRead(BaseModel):
     wallet_name: str
 
     model_config = {"from_attributes": True}
+
+
+class AddressRead(BaseModel):
+    wallet_name: str
+    address: str
+
+
+class BalanceRead(BaseModel):
+    wallet_name: str
+    confirmed_balance_btc: str
+    unconfirmed_balance_btc: str
+    total_balance_btc: str
+    confirmed_balance_sats: int
+    unconfirmed_balance_sats: int
+    total_balance_sats: int
