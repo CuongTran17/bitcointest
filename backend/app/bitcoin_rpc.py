@@ -58,3 +58,11 @@ class BitcoinRpcClient:
         confirmed = Decimal(str(self.call("getbalance", ["*", 1], wallet=wallet)))
         total = Decimal(str(self.call("getbalance", ["*", 0], wallet=wallet)))
         return {"confirmed": confirmed, "unconfirmed": total - confirmed, "total": total}
+
+    def send_to_address(self, wallet: str, address: str, amount_btc: Decimal) -> str:
+        self.ensure_wallet_loaded(wallet)
+        return self.call("sendtoaddress", [address, f"{amount_btc:.8f}"], wallet=wallet)
+
+    def mine_blocks(self, wallet: str, block_count: int) -> list[str]:
+        address = self.get_new_address(wallet)
+        return self.call("generatetoaddress", [block_count, address])
