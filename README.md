@@ -2,16 +2,54 @@
 
 Local Bitcoin Bank is a learning project that uses Bitcoin Core regtest to send real local Bitcoin transactions without connecting to mainnet.
 
+## What You Will Run
+
+The local app has three parts:
+
+```text
+React web app
+  -> FastAPI backend
+    -> Bitcoin Core regtest
+```
+
+Keep Bitcoin Core and the backend running while using the web app.
+
 ## Requirements
 
 - Windows PowerShell
 - Bitcoin Core v31.1
 - Python 3.14 or newer
 - Node.js 22 or newer
+- Git
 
-## Bitcoin Core Setup
+Check versions:
 
-Create `%APPDATA%\Bitcoin\bitcoin.conf`:
+```powershell
+& "C:\Program Files\Bitcoin\daemon\bitcoin-cli.exe" --version
+python --version
+node --version
+npm --version
+git --version
+```
+
+## 1. Clone The Project
+
+```powershell
+git clone https://github.com/CuongTran17/bitcointest.git
+cd bitcointest
+git checkout feature/local-bitcoin-bank-app
+```
+
+## 2. Configure Bitcoin Core
+
+Create the Bitcoin data folder and config file:
+
+```powershell
+New-Item -ItemType Directory -Force "$env:APPDATA\Bitcoin"
+notepad "$env:APPDATA\Bitcoin\bitcoin.conf"
+```
+
+Paste this into `bitcoin.conf`:
 
 ```ini
 regtest=1
@@ -21,13 +59,33 @@ rpcpassword=bitcoinpass
 fallbackfee=0.0001
 ```
 
-Start Bitcoin Core:
+## 3. Start Bitcoin Core Regtest
+
+Open PowerShell tab 1:
 
 ```powershell
 & "C:\Program Files\Bitcoin\daemon\bitcoind.exe" -regtest
 ```
 
-Create wallets:
+Keep this tab open.
+
+In another PowerShell tab, check that regtest is running:
+
+```powershell
+& "C:\Program Files\Bitcoin\daemon\bitcoin-cli.exe" -regtest getblockchaininfo
+```
+
+The response should include:
+
+```json
+{
+  "chain": "regtest"
+}
+```
+
+## 4. Create Or Load Wallets
+
+Run these once:
 
 ```powershell
 & "C:\Program Files\Bitcoin\daemon\bitcoin-cli.exe" -regtest createwallet "alice"
@@ -35,29 +93,67 @@ Create wallets:
 & "C:\Program Files\Bitcoin\daemon\bitcoin-cli.exe" -regtest createwallet "miner"
 ```
 
-Fund the miner, then fund Alice from the miner faucet:
+If a wallet already exists, load it instead:
+
+```powershell
+& "C:\Program Files\Bitcoin\daemon\bitcoin-cli.exe" -regtest loadwallet "alice"
+& "C:\Program Files\Bitcoin\daemon\bitcoin-cli.exe" -regtest loadwallet "bob"
+& "C:\Program Files\Bitcoin\daemon\bitcoin-cli.exe" -regtest loadwallet "miner"
+```
+
+Check loaded wallets:
+
+```powershell
+& "C:\Program Files\Bitcoin\daemon\bitcoin-cli.exe" -regtest listwallets
+```
+
+## 5. Fund The Miner Wallet
+
+The miner wallet acts as a local faucet.
 
 ```powershell
 $minerAddress = & "C:\Program Files\Bitcoin\daemon\bitcoin-cli.exe" -regtest -rpcwallet=miner getnewaddress
 & "C:\Program Files\Bitcoin\daemon\bitcoin-cli.exe" -regtest generatetoaddress 101 $minerAddress
-
-$aliceAddress = & "C:\Program Files\Bitcoin\daemon\bitcoin-cli.exe" -regtest -rpcwallet=alice getnewaddress
-& "C:\Program Files\Bitcoin\daemon\bitcoin-cli.exe" -regtest -rpcwallet=miner sendtoaddress $aliceAddress 10
-& "C:\Program Files\Bitcoin\daemon\bitcoin-cli.exe" -regtest generatetoaddress 1 $minerAddress
-& "C:\Program Files\Bitcoin\daemon\bitcoin-cli.exe" -regtest -rpcwallet=alice getbalance "*" 1
+& "C:\Program Files\Bitcoin\daemon\bitcoin-cli.exe" -regtest -rpcwallet=miner getbalance
 ```
 
-## Backend
+The miner should now have spendable regtest BTC.
+
+## 6. Setup Backend
+
+Open PowerShell tab 2 in the project folder:
 
 ```powershell
 cd backend
 python -m venv .venv
 .\.venv\Scripts\python.exe -m ensurepip --upgrade
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Start the backend:
+
+```powershell
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
 ```
 
-## Frontend
+Keep this tab open.
+
+Backend URL:
+
+```text
+http://127.0.0.1:8000
+```
+
+Quick backend checks:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/health
+Invoke-RestMethod http://127.0.0.1:8000/health/bitcoin
+```
+
+## 7. Setup And Start The Web App
+
+Open PowerShell tab 3 in the project folder:
 
 ```powershell
 cd frontend
@@ -65,29 +161,131 @@ npm install
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173`.
+Open the web app:
 
-## Demo Flow
+```text
+http://127.0.0.1:5173
+```
 
-1. Open the app.
-2. Select Alice and click `Faucet 10 BTC` if Alice does not already have confirmed BTC.
-3. Select Bob and create a receive address.
-4. Select Alice and send `2 BTC` to Bob's address.
-5. Select Bob and confirm `pending BTC` shows the incoming transfer.
-6. Click `Mine 1 block`.
-7. Select Bob and confirm pending BTC moved to confirmed BTC.
-8. Open transaction history for Alice and Bob; the transaction should move from `pending` to `confirmed`.
+Keep the frontend tab open while using the app.
 
-## Backend Tests
+## 8. Demo Flow In The Web App
+
+1. Open `http://127.0.0.1:5173`.
+2. Select Alice.
+3. Click `Faucet 10 BTC` to fund Alice from the miner wallet.
+4. Select Bob.
+5. Click `New address` and copy Bob's address.
+6. Select Alice.
+7. Paste Bob's address into `Send`.
+8. Send `2.00000000` BTC.
+9. Select Bob and check that the transfer appears as pending.
+10. Click `Mine 1 block`.
+11. Select Bob again and check that pending BTC moved to confirmed BTC.
+12. Review transaction history for Alice and Bob.
+
+## Useful API Commands
+
+Create default app users:
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/users -ContentType "application/json" -Body (@{ name = "Alice"; wallet_name = "alice" } | ConvertTo-Json)
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/users -ContentType "application/json" -Body (@{ name = "Bob"; wallet_name = "bob" } | ConvertTo-Json)
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/users -ContentType "application/json" -Body (@{ name = "Miner"; wallet_name = "miner" } | ConvertTo-Json)
+```
+
+Fund Alice from the faucet:
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/faucet/alice -ContentType "application/json" -Body (@{ amount_btc = "10.00000000" } | ConvertTo-Json)
+```
+
+Get Bob address:
+
+```powershell
+$bobAddress = Invoke-RestMethod -Method Post http://127.0.0.1:8000/wallets/bob/address
+$bobAddress.address
+```
+
+Send from Alice to Bob:
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/transactions/send -ContentType "application/json" -Body (@{ from_wallet = "alice"; to_address = $bobAddress.address; amount_btc = "2.00000000" } | ConvertTo-Json)
+```
+
+Mine one confirmation block:
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/mine -ContentType "application/json" -Body (@{ wallet_name = "miner"; block_count = 1 } | ConvertTo-Json)
+```
+
+Check balances and history:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/wallets/alice/balance
+Invoke-RestMethod http://127.0.0.1:8000/wallets/bob/balance
+Invoke-RestMethod http://127.0.0.1:8000/transactions/alice
+Invoke-RestMethod http://127.0.0.1:8000/transactions/bob
+```
+
+## Tests And Builds
+
+Backend tests:
 
 ```powershell
 cd backend
 .\.venv\Scripts\python.exe -m pytest -v
 ```
 
-## Frontend Build
+Frontend build:
 
 ```powershell
 cd frontend
 npm run build
 ```
+
+## Common Problems
+
+### `bitcoin-cli` or `bitcoind` is not recognized
+
+Use the full path:
+
+```powershell
+& "C:\Program Files\Bitcoin\daemon\bitcoin-cli.exe" --version
+& "C:\Program Files\Bitcoin\daemon\bitcoind.exe" --version
+```
+
+### Backend cannot connect to Bitcoin Core
+
+Check that:
+
+- The `bitcoind -regtest` PowerShell tab is still running.
+- `%APPDATA%\Bitcoin\bitcoin.conf` has `server=1`.
+- RPC user/password match the backend defaults.
+- `bitcoin-cli -regtest getblockchaininfo` works.
+
+### Wallet is not loaded
+
+Load the wallet:
+
+```powershell
+& "C:\Program Files\Bitcoin\daemon\bitcoin-cli.exe" -regtest loadwallet "alice"
+& "C:\Program Files\Bitcoin\daemon\bitcoin-cli.exe" -regtest loadwallet "bob"
+& "C:\Program Files\Bitcoin\daemon\bitcoin-cli.exe" -regtest loadwallet "miner"
+```
+
+### Alice has 0 BTC
+
+Use the web button `Faucet 10 BTC`, or call:
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/faucet/alice -ContentType "application/json" -Body (@{ amount_btc = "10.00000000" } | ConvertTo-Json)
+```
+
+### Web app cannot call backend
+
+Check that:
+
+- Backend is running at `http://127.0.0.1:8000`.
+- Frontend is running at `http://127.0.0.1:5173`.
+- You opened the Vite URL, not the backend URL.
