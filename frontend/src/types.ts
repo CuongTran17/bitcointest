@@ -21,6 +21,8 @@ export type Address = {
 
 export type Transaction = {
   txid: string;
+  from_wallet: string | null;
+  to_wallet: string | null;
   category: string;
   amount_btc: string;
   amount_sats: number;

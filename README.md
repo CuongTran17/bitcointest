@@ -37,7 +37,6 @@ git --version
 ```powershell
 git clone https://github.com/CuongTran17/bitcointest.git
 cd bitcointest
-git checkout feature/local-bitcoin-bank-app
 ```
 
 ## 2. Configure Bitcoin Core
@@ -175,14 +174,17 @@ Keep the frontend tab open while using the app.
 2. Select Alice.
 3. Click `Faucet 10 BTC` to fund Alice from the miner wallet.
 4. Select Bob.
-5. Click `New address` and copy Bob's address.
-6. Select Alice.
-7. Paste Bob's address into `Send`.
-8. Send `2.00000000` BTC.
-9. Select Bob and check that the transfer appears as pending.
-10. Click `Mine 1 block`.
-11. Select Bob again and check that pending BTC moved to confirmed BTC.
-12. Review transaction history for Alice and Bob.
+5. Click `New address`.
+6. Copy Bob's `bcrt1...` address.
+7. Select Alice.
+8. Paste Bob's address into `Send`.
+9. Send `2.00000000` BTC.
+10. Select Bob and observe `Alice -> Bob`, `pending`, and `0 confirmations`.
+11. Click `Mine 1 block`.
+12. Refresh or switch wallets and observe `confirmed`, at least `1 confirmation`, and a block hash.
+13. Hover the shortened `txid` value when debugging the transaction.
+
+The app can show `Alice -> Bob` only when Bob's address was generated through this app or through `POST /wallets/bob/address`. If Alice sends to an address that the app has never seen, the transaction is still valid, but the history shows `Unknown address`.
 
 ## Useful API Commands
 
@@ -226,6 +228,31 @@ Invoke-RestMethod http://127.0.0.1:8000/wallets/alice/balance
 Invoke-RestMethod http://127.0.0.1:8000/wallets/bob/balance
 Invoke-RestMethod http://127.0.0.1:8000/transactions/alice
 Invoke-RestMethod http://127.0.0.1:8000/transactions/bob
+```
+
+Look up which local wallet owns an address created by the app:
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/addresses/$($bobAddress.address)"
+```
+
+Transaction history returns readable wallet relationship metadata when known:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/transactions/alice
+Invoke-RestMethod http://127.0.0.1:8000/transactions/bob
+```
+
+Important fields:
+
+```json
+{
+  "from_wallet": "alice",
+  "to_wallet": "bob",
+  "status": "pending",
+  "confirmations": 0,
+  "blockhash": null
+}
 ```
 
 ## Tests And Builds

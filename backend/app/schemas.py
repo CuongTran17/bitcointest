@@ -21,6 +21,11 @@ class AddressRead(BaseModel):
     address: str
 
 
+class AddressOwnerRead(BaseModel):
+    address: str
+    wallet_name: str
+
+
 class BalanceRead(BaseModel):
     wallet_name: str
     confirmed_balance_btc: str
@@ -40,6 +45,7 @@ class SendTransactionRequest(BaseModel):
 class SendTransactionRead(BaseModel):
     txid: str
     from_wallet: str
+    to_wallet: str | None = None
     to_address: str
     amount_btc: str
     amount_sats: int
@@ -72,6 +78,8 @@ class MineBlocksRead(BaseModel):
 
 class TransactionRead(BaseModel):
     txid: str
+    from_wallet: str | None = None
+    to_wallet: str | None = None
     category: str
     amount_btc: str
     amount_sats: int

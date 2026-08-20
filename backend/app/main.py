@@ -6,7 +6,7 @@ from app import models
 from app.bitcoin_rpc import BitcoinRpcError
 from app.config import Settings
 from app.db import Base, engine
-from app.routers import faucet, health, mining, transactions, users, wallets
+from app.routers import addresses, faucet, health, mining, transactions, users, wallets
 
 
 def create_app() -> FastAPI:
@@ -26,6 +26,7 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
 
     app.include_router(health.router)
+    app.include_router(addresses.router)
     app.include_router(faucet.router)
     app.include_router(mining.router)
     app.include_router(transactions.router)

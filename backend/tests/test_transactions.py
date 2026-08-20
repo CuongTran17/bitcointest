@@ -22,6 +22,7 @@ def test_send_transaction_returns_txid(client: TestClient, monkeypatch):
     assert response.json() == {
         "txid": "abc123txid",
         "from_wallet": "alice",
+        "to_wallet": None,
         "to_address": "bcrt1qbobaddress",
         "amount_btc": "2.50000000",
         "amount_sats": 250000000,
@@ -62,7 +63,19 @@ def test_faucet_funds_wallet_and_mines_confirmation(client: TestClient, monkeypa
 
 
 def test_list_transactions_returns_status_and_metadata(client: TestClient, monkeypatch):
-    class FakeRpc:
+    class FakeWalletRpc:
+        def get_new_address(self, wallet: str):
+            assert wallet == "bob"
+            return "bcrt1qbobaddress"
+
+    class FakeSendRpc:
+        def send_to_address(self, wallet: str, address: str, amount_btc: Decimal):
+            assert wallet == "alice"
+            assert address == "bcrt1qbobaddress"
+            assert amount_btc == Decimal("2.00000000")
+            return "tx1"
+
+    class FakeListRpc:
         def list_transactions(self, wallet: str, count: int = 20):
             assert wallet == "alice"
             assert count == 20
@@ -86,7 +99,14 @@ def test_list_transactions_returns_status_and_metadata(client: TestClient, monke
                 },
             ]
 
-    monkeypatch.setattr("app.services.transactions.BitcoinRpcClient", lambda: FakeRpc())
+    monkeypatch.setattr("app.services.wallets.BitcoinRpcClient", lambda: FakeWalletRpc())
+    client.post("/wallets/bob/address")
+    monkeypatch.setattr("app.services.transactions.BitcoinRpcClient", lambda: FakeSendRpc())
+    client.post(
+        "/transactions/send",
+        json={"from_wallet": "alice", "to_address": "bcrt1qbobaddress", "amount_btc": "2.00000000"},
+    )
+    monkeypatch.setattr("app.services.transactions.BitcoinRpcClient", lambda: FakeListRpc())
 
     response = client.get("/transactions/alice")
 
@@ -94,6 +114,8 @@ def test_list_transactions_returns_status_and_metadata(client: TestClient, monke
     assert response.json() == [
         {
             "txid": "tx1",
+            "from_wallet": "alice",
+            "to_wallet": "bob",
             "category": "send",
             "amount_btc": "-2.00000000",
             "amount_sats": -200000000,
@@ -105,6 +127,8 @@ def test_list_transactions_returns_status_and_metadata(client: TestClient, monke
         },
         {
             "txid": "tx2",
+            "from_wallet": None,
+            "to_wallet": None,
             "category": "receive",
             "amount_btc": "1.00000000",
             "amount_sats": 100000000,

@@ -127,8 +127,32 @@ code {
   padding-top: 10px;
 }
 
-.history small {
+.history-main {
+  display: grid;
+  gap: 3px;
+}
+
+.direction {
+  font-weight: 700;
+}
+
+.history-item.pending {
+  border-left: 3px solid #b45309;
+  padding-left: 10px;
+}
+
+.history-item.confirmed {
+  border-left: 3px solid #15803d;
+  padding-left: 10px;
+}
+
+.history-meta,
+.txid {
   grid-column: 1 / -1;
+}
+
+.txid {
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 720px) {
