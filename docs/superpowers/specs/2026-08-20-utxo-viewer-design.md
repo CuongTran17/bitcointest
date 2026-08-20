@@ -22,7 +22,7 @@ Endpoint:
 GET /utxos/{wallet_name}
 ```
 
-The service first verifies that the wallet is loaded with the existing `ensure_wallet_loaded` behavior. It then calls `listunspent` for confirmations from `0` through `9999999`, so pending and confirmed outputs are both visible. The result is sorted deterministically with confirmed outputs first, then newest block height, then value descending, then `txid` and `vout`.
+The service first verifies that the wallet is loaded with the existing `ensure_wallet_loaded` behavior. It then calls `listunspent` for confirmations from `0` through `9999999`, so pending and confirmed outputs are both visible. The result is sorted deterministically with confirmed outputs first, then value descending, then `txid` and `vout` because `listunspent` does not provide a stable block-height field.
 
 Response shape:
 
