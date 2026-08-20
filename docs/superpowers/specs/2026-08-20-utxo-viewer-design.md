@@ -42,8 +42,6 @@ Response shape:
       "amount_btc": "8.00000000",
       "amount_sats": 800000000,
       "confirmations": 1,
-      "blockhash": "000...",
-      "blockheight": 101,
       "spendable": true,
       "solvable": true,
       "safe": true
@@ -52,7 +50,7 @@ Response shape:
 }
 ```
 
-`address`, `blockhash`, and `blockheight` are nullable because Bitcoin Core can return UTXOs without an address or block data. Amounts are represented as an 8-decimal string and integer satoshis; application code must not use floating point for BTC arithmetic.
+`address` is nullable because Bitcoin Core can return an output without a standard address. `listunspent` does not provide block hash or block height as stable output fields, so this MVP uses `confirmations` as the confirmation indicator and leaves block metadata to the Transaction Detail and future Block Explorer features. Amounts are represented as an 8-decimal string and integer satoshis; application code must not use floating point for BTC arithmetic.
 
 An unloaded wallet returns HTTP 404 through the existing Bitcoin Core wallet validation. Bitcoin Core failures continue to surface as the existing RPC error response. An empty wallet is a successful response with zero counts, zero totals, and an empty `utxos` array.
 
@@ -66,7 +64,7 @@ The section contains:
 - confirmed and unconfirmed counts;
 - total value in BTC and satoshis;
 - a refresh button with loading and error states;
-- a responsive table/list showing shortened txid, vout, address, value, confirmations, block height, and spendable state;
+- a responsive table/list showing shortened txid, vout, address, value, confirmations, and spendable state;
 - an empty state for wallets with no UTXOs;
 - a compact message when an output has no address.
 
