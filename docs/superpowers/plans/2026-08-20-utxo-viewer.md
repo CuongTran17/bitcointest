@@ -164,7 +164,9 @@ def test_get_utxos_returns_exact_summary_and_sorted_outputs(client: TestClient, 
                 {
                     "txid": "pending-small",
                     "vout": 1,
-                    "amount": "0.50000001",
+                    # Bitcoin Core returns JSON numbers in live responses; this guards
+                    # the smallest BTC unit without doing float arithmetic in the service.
+                    "amount": 0.00000001,
                     "confirmations": 0,
                     "spendable": True,
                     "solvable": True,
@@ -202,8 +204,8 @@ def test_get_utxos_returns_exact_summary_and_sorted_outputs(client: TestClient, 
         "utxo_count": 3,
         "confirmed_count": 2,
         "unconfirmed_count": 1,
-        "total_amount_btc": "4.00000001",
-        "total_amount_sats": 400000001,
+        "total_amount_btc": "3.50000001",
+        "total_amount_sats": 350000001,
         "utxos": [
             {
                 "txid": "confirmed-large",
@@ -231,8 +233,8 @@ def test_get_utxos_returns_exact_summary_and_sorted_outputs(client: TestClient, 
                 "txid": "pending-small",
                 "vout": 1,
                 "address": None,
-                "amount_btc": "0.50000001",
-                "amount_sats": 50000001,
+                "amount_btc": "0.00000001",
+                "amount_sats": 1,
                 "confirmations": 0,
                 "spendable": True,
                 "solvable": True,
@@ -495,6 +497,7 @@ git commit -m "feat: add UTXO viewer component"
 Update imports in `frontend/src/App.tsx`:
 
 ```typescript
+import { useRef } from "react";
 import { getUtxos } from "./api";
 import { UtxoViewer } from "./components/UtxoViewer";
 import type { UtxoSummary } from "./types";
@@ -506,25 +509,34 @@ Add state:
 const [utxoSummary, setUtxoSummary] = useState<UtxoSummary | null>(null);
 const [utxoLoading, setUtxoLoading] = useState(false);
 const [utxoError, setUtxoError] = useState("");
+const utxoRequestId = useRef(0);
 ```
 
 Add:
 
 ```typescript
 async function refreshUtxos(walletName = selectedWallet) {
+  const requestId = ++utxoRequestId.current;
   setUtxoLoading(true);
   setUtxoError("");
   try {
-    setUtxoSummary(await getUtxos(walletName));
+    const summary = await getUtxos(walletName);
+    if (requestId === utxoRequestId.current) {
+      setUtxoSummary(summary);
+    }
   } catch (error) {
-    setUtxoError((error as Error).message);
+    if (requestId === utxoRequestId.current) {
+      setUtxoError((error as Error).message);
+    }
   } finally {
-    setUtxoLoading(false);
+    if (requestId === utxoRequestId.current) {
+      setUtxoLoading(false);
+    }
   }
 }
 ```
 
-Call `refreshUtxos(walletName)` in the selected-wallet callback and call `refreshUtxos()` after `refresh()` in `handleSend`, `handleFaucet`, and `handleMine`. Call it during initial setup after `refresh("alice")`. Keep the selected wallet argument explicit so a quick wallet switch cannot load one wallet's UTXOs into another wallet's view.
+Call `refreshUtxos(walletName)` in the selected-wallet callback and call `refreshUtxos()` after `refresh()` in `handleSend`, `handleFaucet`, and `handleMine`. Call it during initial setup after `refresh("alice")`. The request id is required: passing an explicit wallet name alone does not stop a slower Alice response from overwriting a later Bob response.
 
 - [ ] **Step 2: Render the viewer**
 
@@ -685,6 +697,8 @@ With Bitcoin Core, backend, and frontend running:
 5. Select Bob before mining; verify a pending UTXO with zero confirmations is visible.
 6. Mine one block; click Refresh; verify the same UTXO is confirmed.
 7. Select Miner and verify its UTXOs are different from Bob's.
+8. Switch Alice -> Bob rapidly while throttling the API; verify the final view always belongs to Bob.
+9. Exercise loading, empty, backend-error, and populated states and verify each has a stable, readable layout.
 
 - [ ] **Step 5: Commit the documentation and verification update**
 
@@ -701,7 +715,10 @@ git commit -m "docs: document UTXO viewer usage"
 - [ ] BTC and satoshi totals are exact and consistent.
 - [ ] Empty wallets render a zero-value empty state.
 - [ ] The selected-wallet switch refreshes the UTXO set.
+- [ ] A stale response from a previously selected wallet cannot overwrite the current wallet.
 - [ ] Faucet, send, and mine actions refresh the UTXO set.
+- [ ] Numeric Bitcoin Core amounts, including one satoshi, produce exact aggregate totals.
+- [ ] Loading, empty, error, and populated states are manually verified.
 - [ ] The frontend remains usable on narrow screens.
 - [ ] Backend tests and frontend build pass.
 - [ ] README includes setup/demo/API instructions.

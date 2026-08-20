@@ -77,7 +77,7 @@ Backend tests must verify:
 - the RPC wrapper calls `listunspent` with the wallet context and confirmation range;
 - BTC values are converted exactly to satoshis;
 - confirmed and unconfirmed counts and totals are calculated correctly;
-- nullable address and block fields are accepted;
+- a nullable address field is accepted;
 - output ordering is deterministic;
 - an unloaded wallet returns 404;
 - an empty result returns zero totals and an empty list.

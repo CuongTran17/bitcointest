@@ -19,6 +19,7 @@
 - Use integer heights and sizes; do not use floating point for block metadata.
 - Return blocks newest first and keep ordering deterministic.
 - Do not hardcode Alice, Bob, or Miner into block APIs or UI logic.
+- Execute the shared RPC-hardening task in the Transaction Detail plan first; block wrappers must classify not-found errors by preserved Bitcoin Core RPC code, not message text.
 - Preserve the pre-existing untracked `backend/package-lock.json`; do not add, delete, or modify it.
 - Do not add dependencies.
 
@@ -32,7 +33,7 @@
 - Create: `backend/tests/test_blocks.py`
 
 **Interfaces:**
-- Consumes: `BitcoinRpcClient.call` and existing `get_blockchain_info`.
+- Consumes: the hardened `BitcoinRpcClient.call`, `BitcoinRpcError.rpc_code`, and existing `get_blockchain_info`.
 - Produces: `get_block_hash(height: int) -> str`.
 - Produces: `get_block(block_hash: str, verbosity: int = 1) -> dict[str, Any]`.
 - Produces: `BlockSummaryRead`, `BlockListRead`, and `BlockDetailRead` schemas.
@@ -79,7 +80,7 @@ def test_get_block_calls_metadata_verbosity(monkeypatch):
 
 def test_block_not_found_errors_are_translated_to_404(monkeypatch):
     def fake_call(self, method, params=None, wallet=None):
-        raise BitcoinRpcError("{'code': -8, 'message': 'Block height out of range'}")
+        raise BitcoinRpcError("Block height out of range", rpc_code=-8)
 
     monkeypatch.setattr(BitcoinRpcClient, "call", fake_call)
 
@@ -87,6 +88,7 @@ def test_block_not_found_errors_are_translated_to_404(monkeypatch):
         BitcoinRpcClient().get_block_hash(999999)
 
     assert error.value.status_code == 404
+    assert error.value.rpc_code == -8
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -109,8 +111,8 @@ def get_block_hash(self, height: int) -> str:
     try:
         return self.call("getblockhash", [height])
     except BitcoinRpcError as exc:
-        if "Block height out of range" in exc.message:
-            raise BitcoinRpcError(exc.message, status_code=404) from exc
+        if exc.rpc_code == -8:
+            raise BitcoinRpcError(exc.message, status_code=404, rpc_code=exc.rpc_code) from exc
         raise
 
 
@@ -118,12 +120,12 @@ def get_block(self, block_hash: str, verbosity: int = 1) -> dict[str, Any]:
     try:
         return self.call("getblock", [block_hash, verbosity])
     except BitcoinRpcError as exc:
-        if "Block not found" in exc.message:
-            raise BitcoinRpcError(exc.message, status_code=404) from exc
+        if exc.rpc_code == -5:
+            raise BitcoinRpcError(exc.message, status_code=404, rpc_code=exc.rpc_code) from exc
         raise
 ```
 
-Keep these calls node-level by omitting the wallet argument. The existing `call` method must remain unchanged: only these block-specific wrappers translate the two Bitcoin Core not-found messages to 404; transport and unrelated RPC errors remain 502.
+Keep these calls node-level by omitting the wallet argument. Only these block-specific wrappers translate Core code `-8` for an out-of-range height and `-5` for a missing block to 404. The shared `call` method preserves those codes and converts transport, malformed response, and unrelated RPC failures to 502. Include a second wrapper test for missing-hash code `-5` so both mappings are explicit.
 
 - [ ] **Step 4: Add block schemas**
 
@@ -569,10 +571,12 @@ Render a `section` with class `panel block-explorer` containing:
 - heading `Block Explorer`;
 - chain, tip height, and shortened tip hash;
 - a bounded numeric input or select for `limit` with values `10`, `20`, `50`, `100`;
+- a direct lookup form that accepts either a non-negative height or a 64-character block hash and calls `onSelectBlock` on submit;
 - a `Refresh` button;
 - loading, error, and empty states;
 - newest-first block rows as buttons so users can select a block;
 - selected block metadata and a transaction id list when `selectedBlock` is available.
+- previous/next hash controls rendered as buttons when those hashes exist; clicking either calls `onSelectBlock(fullHash)`.
 
 Use helpers:
 
@@ -588,7 +592,7 @@ function formatTime(value: number | null) {
 }
 ```
 
-Use `title={fullHash}` on shortened hashes and txids. Transaction ids remain text in this task; do not create a fake route for Transaction Detail.
+Use component-local state for the lookup input and trim it before submission. Use `title={fullHash}` on shortened hashes and txids. Transaction ids remain text in this task; do not create a fake route for Transaction Detail. Add accessible labels for the lookup and limit controls, and disable lookup submission for an empty value.
 
 - [ ] **Step 3: Build the frontend**
 
@@ -623,6 +627,7 @@ git commit -m "feat: add block explorer component"
 Update imports:
 
 ```typescript
+import { useEffect, useRef } from "react";
 import { getBlockDetail, getBlocks } from "./api";
 import { BlockExplorer } from "./components/BlockExplorer";
 import type { BlockDetail, BlockList } from "./types";
@@ -638,44 +643,64 @@ const [blockLoading, setBlockLoading] = useState(false);
 const [blockDetailLoading, setBlockDetailLoading] = useState(false);
 const [blockError, setBlockError] = useState("");
 const [blockDetailError, setBlockDetailError] = useState("");
+const blockListRequestId = useRef(0);
+const blockDetailRequestId = useRef(0);
 ```
 
 Add loaders:
 
 ```typescript
 async function selectBlock(blockRef: string) {
+  const requestId = ++blockDetailRequestId.current;
   setBlockDetailLoading(true);
   setBlockDetailError("");
   try {
-    setSelectedBlock(await getBlockDetail(blockRef));
+    const detail = await getBlockDetail(blockRef);
+    if (requestId === blockDetailRequestId.current) {
+      setSelectedBlock(detail);
+    }
   } catch (error) {
-    setBlockDetailError((error as Error).message);
+    if (requestId === blockDetailRequestId.current) {
+      setBlockDetailError((error as Error).message);
+    }
   } finally {
-    setBlockDetailLoading(false);
+    if (requestId === blockDetailRequestId.current) {
+      setBlockDetailLoading(false);
+    }
   }
 }
 
 
-async function refreshBlocks(limit = blockLimit) {
+async function refreshBlocks(limit = blockLimit, selectTip = false) {
+  const requestId = ++blockListRequestId.current;
   setBlockLoading(true);
   setBlockError("");
   try {
     const result = await getBlocks(limit);
+    if (requestId !== blockListRequestId.current) return;
     setBlockList(result);
-    if (result.blocks.length > 0) {
+    if ((selectTip || selectedBlock === null) && result.blocks.length > 0) {
       await selectBlock(String(result.blocks[0].height));
-    } else {
+    } else if (result.blocks.length === 0) {
       setSelectedBlock(null);
     }
   } catch (error) {
-    setBlockError((error as Error).message);
+    if (requestId === blockListRequestId.current) {
+      setBlockError((error as Error).message);
+    }
   } finally {
-    setBlockLoading(false);
+    if (requestId === blockListRequestId.current) {
+      setBlockLoading(false);
+    }
   }
 }
+
+useEffect(() => {
+  refreshBlocks(blockLimit, true).catch(() => undefined);
+}, []);
 ```
 
-Call `refreshBlocks()` during initial setup and after `handleMine`. Do not call it from the wallet switch callback. When the limit changes, update `blockLimit` and call `refreshBlocks(nextLimit)` so the selected newest block remains valid.
+Keep this mount effect separate from wallet/default-user initialization, and do not call it from the wallet-switch callback. Ordinary refresh and limit changes preserve the selected detail; first load and a successful mine call `refreshBlocks(limit, true)` to select the new tip. The request ids prevent stale list/detail responses from replacing newer selections.
 
 - [ ] **Step 2: Render the explorer**
 
@@ -692,14 +717,36 @@ Place after the Mempool View integration, or after `TransactionHistory` if the p
   detailError={blockDetailError}
   onLimitChange={(nextLimit) => {
     setBlockLimit(nextLimit);
-    refreshBlocks(nextLimit).catch(() => undefined);
+    refreshBlocks(nextLimit, false).catch(() => undefined);
   }}
-  onRefresh={() => refreshBlocks().catch(() => undefined)}
+  onRefresh={() => refreshBlocks(blockLimit, false).catch(() => undefined)}
   onSelectBlock={(blockRef) => selectBlock(blockRef).catch(() => undefined)}
 />
 ```
 
-- [ ] **Step 3: Add responsive block explorer styles**
+- [ ] **Step 3: Consolidate post-action refreshes across all four explorer features**
+
+Keep wallet-scoped and node-wide refresh responsibilities explicit:
+
+```typescript
+async function refreshGlobalData(selectTip = false) {
+  await Promise.allSettled([
+    refreshMempool(),
+    refreshBlocks(blockLimit, selectTip),
+  ]);
+}
+
+async function refreshWalletData(walletName = selectedWallet) {
+  await Promise.allSettled([
+    refresh(walletName),
+    refreshUtxos(walletName),
+  ]);
+}
+```
+
+After send and faucet, run the relevant wallet refresh and global refresh with `Promise.allSettled`. After mine, call both groups with `selectTip=true`; if `selectedTxid` exists, include `handleSelectTransaction(selectedTxid)` so its confirmations update. One failed wallet request must not prevent Mempool or Block Explorer from refreshing, and one failed global request must not suppress the other global view. Keep the separate mount effects for Mempool and Block Explorer; do not fold them into wallet initialization.
+
+- [ ] **Step 4: Add responsive block explorer styles**
 
 Add to `frontend/src/styles.css`:
 
@@ -782,7 +829,7 @@ Add to `frontend/src/styles.css`:
 
 Reuse existing `.panel`, `.muted`, `small`, and button styles. Keep the block list and detail inside one panel; do not create nested decorative cards.
 
-- [ ] **Step 4: Run the production build**
+- [ ] **Step 5: Run the production build**
 
 Run:
 
@@ -792,7 +839,7 @@ npm.cmd run build
 
 Expected: PASS with no TypeScript errors.
 
-- [ ] **Step 5: Commit the integration slice**
+- [ ] **Step 6: Commit the integration slice**
 
 ```powershell
 git add frontend/src/App.tsx frontend/src/styles.css
@@ -835,6 +882,8 @@ Add:
 5. Refresh Block Explorer and verify the tip height increases by one.
 6. Select the new block and inspect its coinbase transaction id.
 7. Use the block limit control to compare the latest 10 and latest 20 blocks.
+8. Look up one block directly by height, then paste its full hash and verify both select the same detail.
+9. Use the previous/next hash controls to move between adjacent blocks.
 ```
 
 - [ ] **Step 3: Run all verification commands**
@@ -868,6 +917,10 @@ With Bitcoin Core, backend, and frontend running:
 4. Confirm full hashes are available through hover titles while shortened values keep the layout readable.
 5. Mine one block, refresh, and verify the new tip appears first.
 6. Temporarily stop Bitcoin Core, refresh, and verify the explorer shows an error state instead of crashing.
+7. Verify loading, empty, error, and populated layouts on desktop and a narrow viewport.
+8. Rapidly select two blocks and verify the last selection wins even if its request completes first.
+9. Select an older block, change the list limit, and verify ordinary refresh does not jump back to the tip.
+10. Force one wallet refresh to fail after mining and verify Mempool and Block Explorer still refresh independently.
 
 - [ ] **Step 5: Commit documentation**
 
@@ -883,9 +936,14 @@ git commit -m "docs: document block explorer usage"
 - [ ] Block detail includes metadata and transaction ids.
 - [ ] Invalid references return 422.
 - [ ] Missing blocks return 404.
-- [ ] RPC failures reach the existing error handler.
+- [ ] Missing height/hash errors are mapped by RPC code; connection and unrelated RPC failures remain 502.
 - [ ] Mining refreshes the explorer and shows the new tip.
+- [ ] Direct height/hash lookup and previous/next navigation work from the UI.
+- [ ] Ordinary refresh preserves selection; first load and mining select the newest tip.
+- [ ] Stale list/detail responses cannot overwrite newer state.
+- [ ] Wallet, UTXO, Mempool, Block Explorer, and selected transaction refreshes are coordinated with failure isolation.
 - [ ] The limit is bounded and works for 10, 20, 50, and 100.
 - [ ] The frontend remains readable on narrow screens.
+- [ ] Loading, empty, error, populated, and partial-refresh-failure states are manually verified.
 - [ ] Backend tests and frontend build pass.
 - [ ] README includes API and web demo instructions.

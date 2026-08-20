@@ -4,7 +4,7 @@
 
 **Goal:** Add a click-to-open transaction detail view that explains a selected Bitcoin transaction with decoded raw transaction data, wallet relationship metadata, inputs, outputs, confirmations, block data, and raw JSON.
 
-**Architecture:** Bitcoin Core remains the source of truth for decoded transaction data via `getrawtransaction <txid> true`. SQLite metadata from `app_transactions` and `wallet_addresses` is merged into the detail response so the UI can show readable local wallet labels where known. The frontend keeps the existing single-page dashboard and opens a detail panel when the user selects a transaction from history.
+**Architecture:** Bitcoin Core remains the source of truth for decoded transaction data via `getrawtransaction <txid> 2`. SQLite metadata from `app_transactions` and `wallet_addresses` is merged into the detail response so the UI can show readable local wallet labels where known. This plan first hardens the shared RPC boundary so transport errors and Bitcoin Core JSON-RPC errors have stable API semantics. The frontend keeps the existing single-page dashboard and opens a detail panel when the user selects a transaction from history.
 
 **Tech Stack:** Python 3.14, FastAPI, Pydantic, SQLAlchemy, SQLite, pytest, React, Vite, TypeScript, Bitcoin Core v31.1 regtest.
 
@@ -19,29 +19,36 @@
 - Keep the frontend as one dashboard screen; use an inline detail panel instead of adding routing.
 - Use integer satoshis in backend application logic and formatted BTC strings in API responses.
 - Unknown local wallet relationships must remain valid and render as `Unknown address`.
+- Enable `txindex=1` for regtest so confirmed transactions remain queryable by txid without first knowing their block hash.
+- Preserve Bitcoin Core RPC error codes in `BitcoinRpcError`; map only known resource-absence codes to 404 and keep transport/unrelated RPC failures as 502.
 - Follow the existing FastAPI router/service/test style and React component/style conventions.
 
 ---
 
-### Task 1: Add Bitcoin Core Raw Transaction RPC
+### Task 1: Harden The Shared RPC Boundary And Add Raw Transaction RPC
 
 **Files:**
 - Modify: `backend/app/bitcoin_rpc.py`
 - Create: `backend/tests/test_bitcoin_rpc.py`
 
 **Interfaces:**
-- Produces `BitcoinRpcClient.get_raw_transaction(txid: str, verbose: bool = True) -> dict[str, Any]`.
-- Calls Bitcoin Core RPC method `getrawtransaction` with params `[txid, True]` by default.
+- Extends `BitcoinRpcError(message, status_code=502, rpc_code=None)` while preserving existing callers.
+- `BitcoinRpcClient.call` converts `requests.RequestException`, HTTP failures without a JSON-RPC body, and malformed responses to `BitcoinRpcError(..., status_code=502)`.
+- `BitcoinRpcClient.call` parses a JSON-RPC error before calling `raise_for_status()` and preserves its integer `code` and message.
+- Produces `BitcoinRpcClient.get_raw_transaction(txid: str, verbosity: int = 2, block_hash: str | None = None) -> dict[str, Any]`.
+- Calls `getrawtransaction` with numeric verbosity and maps Bitcoin Core code `-5` to HTTP 404 only in this resource-specific wrapper.
 
 - [ ] **Step 1: Write the failing RPC unit test**
 
 Create `backend/tests/test_bitcoin_rpc.py`:
 
 ```python
-from app.bitcoin_rpc import BitcoinRpcClient
+import requests
+
+from app.bitcoin_rpc import BitcoinRpcClient, BitcoinRpcError
 
 
-def test_get_raw_transaction_calls_verbose_rpc(monkeypatch):
+def test_get_raw_transaction_calls_numeric_verbosity_rpc(monkeypatch):
     calls = []
 
     def fake_call(self, method, params=None, wallet=None):
@@ -53,7 +60,56 @@ def test_get_raw_transaction_calls_verbose_rpc(monkeypatch):
     result = BitcoinRpcClient().get_raw_transaction("tx1")
 
     assert result == {"txid": "tx1", "vin": [], "vout": []}
-    assert calls == [("getrawtransaction", ["tx1", True], None)]
+    assert calls == [("getrawtransaction", ["tx1", 2], None)]
+
+
+def test_call_preserves_json_rpc_error_before_http_error(monkeypatch):
+    class Response:
+        def json(self):
+            return {"result": None, "error": {"code": -5, "message": "No such transaction"}}
+
+        def raise_for_status(self):
+            raise requests.HTTPError("500 Server Error")
+
+    monkeypatch.setattr(requests, "post", lambda *args, **kwargs: Response())
+
+    try:
+        BitcoinRpcClient().call("getrawtransaction", ["missing", 2])
+    except BitcoinRpcError as exc:
+        assert exc.rpc_code == -5
+        assert exc.status_code == 502
+    else:
+        raise AssertionError("BitcoinRpcError was not raised")
+
+
+def test_call_maps_connection_failure_to_502(monkeypatch):
+    def fail(*args, **kwargs):
+        raise requests.ConnectionError("connection refused")
+
+    monkeypatch.setattr(requests, "post", fail)
+
+    try:
+        BitcoinRpcClient().call("getblockchaininfo")
+    except BitcoinRpcError as exc:
+        assert exc.status_code == 502
+        assert exc.rpc_code is None
+    else:
+        raise AssertionError("BitcoinRpcError was not raised")
+
+
+def test_get_raw_transaction_maps_core_not_found_to_404(monkeypatch):
+    def fake_call(self, method, params=None, wallet=None):
+        raise BitcoinRpcError("No such transaction", rpc_code=-5)
+
+    monkeypatch.setattr(BitcoinRpcClient, "call", fake_call)
+
+    try:
+        BitcoinRpcClient().get_raw_transaction("missing")
+    except BitcoinRpcError as exc:
+        assert exc.status_code == 404
+        assert exc.rpc_code == -5
+    else:
+        raise AssertionError("BitcoinRpcError was not raised")
 ```
 
 - [ ] **Step 2: Run the focused test and verify it fails**
@@ -65,16 +121,76 @@ cd backend
 .\.venv\Scripts\python.exe -m pytest tests/test_bitcoin_rpc.py -v
 ```
 
-Expected: FAIL with `AttributeError` because `get_raw_transaction` does not exist.
+Expected: FAIL because the current RPC client leaks `requests` exceptions, does not preserve RPC codes, and has no `get_raw_transaction` method.
 
-- [ ] **Step 3: Implement the minimal RPC method**
+- [ ] **Step 3: Implement the shared RPC error boundary and raw transaction method**
 
 Modify `backend/app/bitcoin_rpc.py`:
 
 ```python
-    def get_raw_transaction(self, txid: str, verbose: bool = True) -> dict[str, Any]:
-        return self.call("getrawtransaction", [txid, verbose])
+class BitcoinRpcError(RuntimeError):
+    def __init__(self, message: str, status_code: int = 502, rpc_code: int | None = None):
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
+        self.rpc_code = rpc_code
+
+
+class BitcoinRpcClient:
+    # Keep the existing constructor and other methods.
+    def call(self, method: str, params: list[Any] | None = None, wallet: str | None = None) -> Any:
+        url = self.base_url if wallet is None else f"{self.base_url}/wallet/{wallet}"
+        try:
+            response = requests.post(
+                url,
+                json={"jsonrpc": "1.0", "id": "local-bitcoin-bank", "method": method, "params": params or []},
+                auth=self.auth,
+                timeout=10,
+            )
+        except requests.RequestException as exc:
+            raise BitcoinRpcError(f"Bitcoin Core unavailable: {exc}") from exc
+
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise BitcoinRpcError("Bitcoin Core returned invalid JSON") from exc
+
+        if not isinstance(payload, dict):
+            raise BitcoinRpcError("Bitcoin Core returned an invalid RPC response")
+        rpc_error = payload.get("error")
+        if rpc_error is not None:
+            rpc_code = rpc_error.get("code") if isinstance(rpc_error, dict) else None
+            message = rpc_error.get("message", str(rpc_error)) if isinstance(rpc_error, dict) else str(rpc_error)
+            raise BitcoinRpcError(
+                message,
+                rpc_code=rpc_code if isinstance(rpc_code, int) else None,
+            )
+        try:
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise BitcoinRpcError(f"Bitcoin Core HTTP error: {exc}") from exc
+        if "result" not in payload:
+            raise BitcoinRpcError("Bitcoin Core response is missing result")
+        return payload["result"]
+
+    def get_raw_transaction(
+        self,
+        txid: str,
+        verbosity: int = 2,
+        block_hash: str | None = None,
+    ) -> dict[str, Any]:
+        params: list[Any] = [txid, verbosity]
+        if block_hash is not None:
+            params.append(block_hash)
+        try:
+            return self.call("getrawtransaction", params)
+        except BitcoinRpcError as exc:
+            if exc.rpc_code == -5:
+                raise BitcoinRpcError(exc.message, status_code=404, rpc_code=exc.rpc_code) from exc
+            raise
 ```
+
+The ordering is intentional: inspect a valid JSON-RPC error body before `raise_for_status()`, because Bitcoin Core can return useful RPC codes inside an HTTP error response.
 
 - [ ] **Step 4: Run the focused test and verify it passes**
 
@@ -144,9 +260,10 @@ def test_get_transaction_detail_merges_raw_transaction_with_app_metadata(client,
             return "tx1"
 
     class FakeRawRpc:
-        def get_raw_transaction(self, txid: str, verbose: bool = True):
+        def get_raw_transaction(self, txid: str, verbosity: int = 2, block_hash: str | None = None):
             assert txid == "tx1"
-            assert verbose is True
+            assert verbosity == 2
+            assert block_hash is None
             return {
                 "txid": "tx1",
                 "confirmations": 1,
@@ -177,18 +294,18 @@ def test_get_transaction_detail_merges_raw_transaction_with_app_metadata(client,
                 ],
             }
 
-    monkeypatch.setattr("app.services.transactions.BitcoinRpcClient", lambda: FakeSendRpc())
-    client.post(
-        "/transactions/send",
-        json={"from_wallet": "alice", "to_address": "bcrt1qbobaddress", "amount_btc": "2.00000000"},
-    )
-
     from app.db import get_db
 
     db = next(client.app.dependency_overrides[get_db]())
     db.add(WalletAddress(address="bcrt1qbobaddress", wallet_name="bob"))
     db.commit()
     db.close()
+
+    monkeypatch.setattr("app.services.transactions.BitcoinRpcClient", lambda: FakeSendRpc())
+    client.post(
+        "/transactions/send",
+        json={"from_wallet": "alice", "to_address": "bcrt1qbobaddress", "amount_btc": "2.00000000"},
+    )
 
     monkeypatch.setattr("app.services.transactions.BitcoinRpcClient", lambda: FakeRawRpc())
 
@@ -336,7 +453,7 @@ Add service:
 
 ```python
 def get_transaction_detail(txid: str, db: Session) -> TransactionDetailRead:
-    raw = BitcoinRpcClient().get_raw_transaction(txid, verbose=True)
+    raw = BitcoinRpcClient().get_raw_transaction(txid, verbosity=2)
     metadata = read_app_transaction(db, txid)
     output_addresses = [address for address in (output_address(vout) for vout in raw.get("vout", [])) if address]
     wallet_map = wallet_by_address_map(db, output_addresses)
@@ -421,8 +538,12 @@ def test_transaction_detail_propagates_bitcoin_rpc_error(client, monkeypatch):
     from app.bitcoin_rpc import BitcoinRpcError
 
     class FakeRpc:
-        def get_raw_transaction(self, txid: str, verbose: bool = True):
-            raise BitcoinRpcError("No such mempool or blockchain transaction", status_code=404)
+        def get_raw_transaction(self, txid: str, verbosity: int = 2, block_hash: str | None = None):
+            raise BitcoinRpcError(
+                "No such mempool or blockchain transaction",
+                status_code=404,
+                rpc_code=-5,
+            )
 
     monkeypatch.setattr("app.services.transactions.BitcoinRpcClient", lambda: FakeRpc())
 
@@ -611,6 +732,7 @@ Move the existing row contents inside the button and close `</button>` before `<
 Modify `frontend/src/App.tsx` imports:
 
 ```typescript
+import { useRef, useState } from "react";
 import { ..., getTransactionDetail, ... } from "./api";
 import type { Balance, Transaction, TransactionDetail, User } from "./types";
 ```
@@ -621,23 +743,35 @@ Add state:
 const [selectedTxid, setSelectedTxid] = useState<string | null>(null);
 const [transactionDetail, setTransactionDetail] = useState<TransactionDetail | null>(null);
 const [detailLoading, setDetailLoading] = useState(false);
+const detailRequestId = useRef(0);
 ```
 
 Add handler:
 
 ```typescript
 async function handleSelectTransaction(txid: string) {
+  const requestId = ++detailRequestId.current;
   setSelectedTxid(txid);
+  setTransactionDetail(null);
   setDetailLoading(true);
   try {
-    setTransactionDetail(await getTransactionDetail(txid));
+    const detail = await getTransactionDetail(txid);
+    if (requestId === detailRequestId.current) {
+      setTransactionDetail(detail);
+    }
   } catch (error) {
-    setMessage(error instanceof Error ? error.message : "Failed to load transaction detail");
+    if (requestId === detailRequestId.current) {
+      setMessage(error instanceof Error ? error.message : "Failed to load transaction detail");
+    }
   } finally {
-    setDetailLoading(false);
+    if (requestId === detailRequestId.current) {
+      setDetailLoading(false);
+    }
   }
 }
 ```
+
+In the wallet-selection handler, increment `detailRequestId.current`, then clear `selectedTxid`, `transactionDetail`, and `detailLoading`. This prevents a late response for Alice from appearing after switching to Bob. After a successful mine, call `handleSelectTransaction(selectedTxid)` when a transaction is selected so pending detail visibly becomes confirmed.
 
 Update `TransactionHistory`:
 
@@ -954,6 +1088,7 @@ git commit -m "feat: show transaction detail panel"
 **Interfaces:**
 - Documentation explains how to click a transaction row and what the detail fields mean.
 - Documentation includes the direct API command for `GET /transactions/detail/{txid}`.
+- Documentation enables the regtest transaction index required for confirmed txid lookup.
 
 - [ ] **Step 1: Add README detail instructions**
 
@@ -965,6 +1100,19 @@ Add to the web demo section after the existing transaction history steps:
 
 The detail panel uses Bitcoin Core `getrawtransaction` data. Wallet names appear only when the app has local metadata for that txid or output address. Fee may show `Not available` for transactions where Bitcoin Core does not return fee directly.
 ```
+
+Add `txindex=1` to the regtest Bitcoin Core configuration. For an existing regtest data directory created without the index, document a one-time rebuild before normal startup:
+
+```ini
+[regtest]
+txindex=1
+```
+
+```powershell
+& "C:\Program Files\Bitcoin\daemon\bitcoind.exe" -regtest -txindex=1 -reindex
+```
+
+After that one-time rebuild finishes, use the normal documented startup command with `txindex=1`. Explain that omitting this setting can make `getrawtransaction` fail for an older confirmed transaction unless its block hash is supplied.
 
 Add to API section:
 
@@ -1006,7 +1154,10 @@ With Bitcoin Core, backend, and frontend running:
 3. Click the new history row.
 4. Verify the detail panel shows Alice -> Bob, one input, outputs, raw JSON, and pending status.
 5. Click Mine 1 block.
-6. Click the row again and verify confirmed status, confirmations, and block hash.
+6. Verify the already-open detail refreshes to confirmed status and shows confirmations and block hash.
+7. Rapidly click two different history rows and verify the last selected row owns the detail panel even if the earlier request finishes later.
+8. Switch wallets while a detail request is loading and verify stale detail is cleared.
+9. Verify loading, not-found/error, pending, and confirmed detail states render without shifting or overlapping the dashboard.
 ```
 
 - [ ] **Step 5: Commit**
@@ -1030,6 +1181,11 @@ git commit -m "docs: add transaction detail demo"
 - [ ] Clicking a transaction row opens the detail panel.
 - [ ] Raw JSON is visible behind a collapsible section.
 - [ ] Unknown fee renders as `Not available`.
+- [ ] RPC connection/HTTP failures return a controlled 502 response instead of leaking a `requests` exception.
+- [ ] Bitcoin Core transaction-not-found code `-5` returns 404.
+- [ ] Confirmed transactions remain queryable by txid after `txindex=1` is enabled and the one-time reindex is complete.
+- [ ] Rapid row selection and wallet switching cannot display stale transaction detail.
+- [ ] Loading, error, pending, and confirmed detail states are manually verified.
 
 ## Self-Review
 

@@ -4,7 +4,7 @@
 
 **Goal:** Add a node-wide Mempool View that shows pending regtest transactions, fee metadata, dependency counts, and known local wallet relationships.
 
-**Architecture:** Bitcoin Core remains authoritative through node-level `getrawmempool true` and decoded `getrawtransaction <txid> true` calls. SQLite is read only for existing `AppTransaction` and `WalletAddress` metadata; no mempool snapshot is persisted. The frontend loads a global mempool summary independently from the selected wallet and refreshes it after initial load, send, faucet, mine, and manual refresh.
+**Architecture:** Bitcoin Core remains authoritative through node-level `getrawmempool true` and decoded `getrawtransaction <txid> 1` calls. SQLite is read only for existing `AppTransaction` and `WalletAddress` metadata; no mempool snapshot is persisted. The frontend loads a global mempool summary independently from the selected wallet and refreshes it after initial load, send, faucet, mine, and manual refresh.
 
 **Tech Stack:** FastAPI, Pydantic, SQLAlchemy, pytest, React, TypeScript, Vite, plain CSS, Bitcoin Core regtest RPC.
 
@@ -13,7 +13,8 @@
 ## Global Constraints
 
 - Mempool scope is node-wide; do not add a `wallet_name` path parameter.
-- Use `getrawmempool` with verbose mode and `getrawtransaction` with verbose mode for returned mempool txids.
+- Execute the shared RPC-hardening task in the Transaction Detail plan first. Reuse `get_raw_transaction(txid, verbosity=1)` and its transport/error behavior instead of defining a second wrapper.
+- Use `getrawmempool` with verbose mode and `getrawtransaction` with numeric verbosity `1` for returned mempool txids.
 - Treat Bitcoin Core as the source of current mempool state; do not create a SQLite mempool table or cache.
 - Use `Decimal` and integer satoshis for fee totals and fee rates; do not use floating point in backend calculations.
 - Do not infer sender ownership from raw transaction inputs; only use existing app metadata for wallet labels.
@@ -31,9 +32,8 @@
 - Create: `backend/tests/test_mempool.py`
 
 **Interfaces:**
-- Consumes: `BitcoinRpcClient.call(method, params, wallet)`.
+- Consumes: the hardened `BitcoinRpcClient.call` and `get_raw_transaction(txid, verbosity, block_hash)` from the Transaction Detail plan.
 - Produces: `get_raw_mempool(verbose: bool = True) -> dict[str, dict[str, Any]]`.
-- Produces: `get_raw_transaction(txid: str, verbose: bool = True) -> dict[str, Any]`.
 - Produces: `MempoolTransactionRead` and `MempoolSummaryRead` schemas.
 
 - [ ] **Step 1: Write failing RPC wrapper tests**
@@ -59,19 +59,6 @@ def test_get_raw_mempool_requests_verbose_node_data(monkeypatch):
     assert calls == [("getrawmempool", [True], None)]
 
 
-def test_get_raw_transaction_requests_verbose_mempool_transaction(monkeypatch):
-    calls = []
-
-    def fake_call(self, method, params=None, wallet=None):
-        calls.append((method, params, wallet))
-        return {"txid": "tx1", "vout": []}
-
-    monkeypatch.setattr(BitcoinRpcClient, "call", fake_call)
-
-    result = BitcoinRpcClient().get_raw_transaction("tx1")
-
-    assert result == {"txid": "tx1", "vout": []}
-    assert calls == [("getrawtransaction", ["tx1", True], None)]
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -80,10 +67,10 @@ Run:
 
 ```powershell
 cd backend
-.\.venv\Scripts\python.exe -m pytest tests/test_mempool.py::test_get_raw_mempool_requests_verbose_node_data tests/test_mempool.py::test_get_raw_transaction_requests_verbose_mempool_transaction -v
+.\.venv\Scripts\python.exe -m pytest tests/test_mempool.py::test_get_raw_mempool_requests_verbose_node_data -v
 ```
 
-Expected: FAIL because the two RPC methods do not exist.
+Expected: FAIL because `get_raw_mempool` does not exist. The shared raw-transaction tests from the Transaction Detail plan must already pass.
 
 - [ ] **Step 3: Implement the RPC methods**
 
@@ -92,13 +79,9 @@ Add to `BitcoinRpcClient` in `backend/app/bitcoin_rpc.py`:
 ```python
 def get_raw_mempool(self, verbose: bool = True) -> dict[str, dict[str, Any]]:
     return self.call("getrawmempool", [verbose])
-
-
-def get_raw_transaction(self, txid: str, verbose: bool = True) -> dict[str, Any]:
-    return self.call("getrawtransaction", [txid, verbose])
 ```
 
-These methods intentionally do not pass a wallet name because mempool and raw transaction RPCs are node-level calls.
+This method does not pass a wallet name because the mempool is node-level. Do not reimplement `get_raw_transaction`; call the shared method with `verbosity=1` in the service.
 
 - [ ] **Step 4: Add Pydantic response models**
 
@@ -142,7 +125,7 @@ class MempoolSummaryRead(BaseModel):
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_mempool.py::test_get_raw_mempool_requests_verbose_node_data tests/test_mempool.py::test_get_raw_transaction_requests_verbose_mempool_transaction tests/test_health.py tests/test_transactions.py -v
+.\.venv\Scripts\python.exe -m pytest tests/test_mempool.py::test_get_raw_mempool_requests_verbose_node_data tests/test_bitcoin_rpc.py tests/test_health.py tests/test_transactions.py -v
 ```
 
 Expected: PASS.
@@ -203,6 +186,8 @@ def test_mempool_returns_fee_summary_and_known_wallet_metadata(client: TestClien
         },
     ).status_code == 201
 
+    decoded_txids = []
+
     class FakeMempoolRpc:
         def get_raw_mempool(self, verbose: bool = True):
             assert verbose is True
@@ -237,17 +222,17 @@ def test_mempool_returns_fee_summary_and_known_wallet_metadata(client: TestClien
                 },
             }
 
-        def get_raw_transaction(self, txid: str, verbose: bool = True):
-            assert verbose is True
+        def get_raw_transaction(self, txid: str, verbosity: int = 2, block_hash: str | None = None):
+            assert verbosity == 1
+            assert block_hash is None
+            decoded_txids.append(txid)
             return {
                 "txid": txid,
                 "vout": [
                     {
                         "value": "2.00000000",
                         "scriptPubKey": {
-                            "addresses": [
-                                "bcrt1qbobaddress" if txid == "known-tx" else "bcrt1qexternal"
-                            ]
+                            "address": "bcrt1qbobaddress" if txid == "known-tx" else "bcrt1qexternal"
                         },
                     }
                 ],
@@ -274,6 +259,7 @@ def test_mempool_returns_fee_summary_and_known_wallet_metadata(client: TestClien
     assert known["output_addresses"] == ["bcrt1qbobaddress"]
     assert payload["transactions"][0]["from_wallet"] is None
     assert payload["transactions"][0]["to_wallet"] is None
+    assert set(decoded_txids) == {"known-tx", "unknown-tx"}
 
 
 def test_mempool_returns_empty_summary(client: TestClient, monkeypatch):
@@ -293,6 +279,29 @@ def test_mempool_returns_empty_summary(client: TestClient, monkeypatch):
         "total_fee_sats": 0,
         "transactions": [],
     }
+
+
+def test_mempool_skips_entry_mined_between_snapshot_and_decode(client: TestClient, monkeypatch):
+    from app.bitcoin_rpc import BitcoinRpcError
+
+    class FakeRpc:
+        def get_raw_mempool(self, verbose: bool = True):
+            return {
+                "vanished": {"vsize": 100, "fees": {"base": "0.00000100"}},
+                "remaining": {"vsize": 120, "fees": {"base": "0.00000200"}},
+            }
+
+        def get_raw_transaction(self, txid: str, verbosity: int = 2, block_hash: str | None = None):
+            if txid == "vanished":
+                raise BitcoinRpcError("No such transaction", status_code=404, rpc_code=-5)
+            return {"txid": txid, "vout": []}
+
+    monkeypatch.setattr("app.services.mempool.BitcoinRpcClient", lambda: FakeRpc())
+
+    response = client.get("/mempool")
+
+    assert response.status_code == 200
+    assert [item["txid"] for item in response.json()["transactions"]] == ["remaining"]
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -300,7 +309,7 @@ def test_mempool_returns_empty_summary(client: TestClient, monkeypatch):
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_mempool.py::test_mempool_returns_fee_summary_and_known_wallet_metadata tests/test_mempool.py::test_mempool_returns_empty_summary -v
+.\.venv\Scripts\python.exe -m pytest tests/test_mempool.py::test_mempool_returns_fee_summary_and_known_wallet_metadata tests/test_mempool.py::test_mempool_returns_empty_summary tests/test_mempool.py::test_mempool_skips_entry_mined_between_snapshot_and_decode -v
 ```
 
 Expected: FAIL because the mempool service and route do not exist.
@@ -314,7 +323,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from app.bitcoin_rpc import BitcoinRpcClient, btc_to_sats
+from app.bitcoin_rpc import BitcoinRpcClient, BitcoinRpcError, btc_to_sats
 from app.models import AppTransaction, WalletAddress
 from app.schemas import MempoolSummaryRead, MempoolTransactionRead
 
@@ -332,7 +341,10 @@ def format_fee_rate(fee_sats: int, vsize: int) -> str | None:
 def output_addresses(raw_transaction: dict) -> list[str]:
     addresses = []
     for output in raw_transaction.get("vout", []):
-        for address in output.get("scriptPubKey", {}).get("addresses", []):
+        script = output.get("scriptPubKey", {})
+        address = script.get("address")
+        candidates = [address] if isinstance(address, str) else script.get("addresses", [])
+        for address in candidates:
             if address not in addresses:
                 addresses.append(address)
     return addresses
@@ -366,12 +378,22 @@ def list_mempool_transactions(db: Session) -> MempoolSummaryRead:
         fee_btc = Decimal(str(fee_value))
         fee_sats = btc_to_sats(fee_btc)
         vsize = int(entry.get("vsize", 0))
-        raw_transaction = rpc.get_raw_transaction(txid, verbose=True)
+        try:
+            raw_transaction = rpc.get_raw_transaction(txid, verbosity=1)
+        except BitcoinRpcError as exc:
+            if exc.status_code == 404:
+                continue  # The transaction left the mempool after the snapshot.
+            raise
         addresses = output_addresses(raw_transaction)
         metadata = metadata_by_txid.get(txid)
         mapped_wallets = {known_addresses[address] for address in addresses if address in known_addresses}
-        to_wallet = metadata.to_wallet if metadata is not None else next(iter(sorted(mapped_wallets)), None)
-        to_address = metadata.to_address if metadata is not None else (addresses[0] if addresses else None)
+        inferred_wallet = next(iter(mapped_wallets)) if len(mapped_wallets) == 1 else None
+        inferred_address = next(
+            (address for address in addresses if known_addresses.get(address) == inferred_wallet),
+            None,
+        )
+        to_wallet = metadata.to_wallet if metadata is not None else inferred_wallet
+        to_address = metadata.to_address if metadata is not None else inferred_address
         transactions.append(
             MempoolTransactionRead(
                 txid=txid,
@@ -409,7 +431,7 @@ def list_mempool_transactions(db: Session) -> MempoolSummaryRead:
     )
 ```
 
-The `metadata.to_wallet` value takes precedence over output address inference because it records the application's explicit recipient mapping. Address inference is only a fallback for transactions without app metadata.
+The `metadata.to_wallet` value takes precedence over output address inference because it records the application's explicit recipient mapping. For transactions without app metadata, infer a recipient only when exactly one known local wallet appears in the outputs; otherwise leave `to_wallet` and `to_address` null while still returning every value in `output_addresses`. Add a focused helper test for the current singular `scriptPubKey.address` shape and a legacy `scriptPubKey.addresses` fallback. The transaction list remains deterministic with `(-(time or 0), txid)`, and `vsize <= 0` must produce a null fee rate.
 
 - [ ] **Step 4: Add the router and register it**
 
@@ -585,6 +607,7 @@ git commit -m "feat: add mempool view component"
 Update imports:
 
 ```typescript
+import { useEffect, useRef } from "react";
 import { getMempool } from "./api";
 import { MempoolView } from "./components/MempoolView";
 import type { MempoolSummary } from "./types";
@@ -596,25 +619,38 @@ Add state:
 const [mempoolSummary, setMempoolSummary] = useState<MempoolSummary | null>(null);
 const [mempoolLoading, setMempoolLoading] = useState(false);
 const [mempoolError, setMempoolError] = useState("");
+const mempoolRequestId = useRef(0);
 ```
 
 Add:
 
 ```typescript
 async function refreshMempool() {
+  const requestId = ++mempoolRequestId.current;
   setMempoolLoading(true);
   setMempoolError("");
   try {
-    setMempoolSummary(await getMempool());
+    const summary = await getMempool();
+    if (requestId === mempoolRequestId.current) {
+      setMempoolSummary(summary);
+    }
   } catch (error) {
-    setMempoolError((error as Error).message);
+    if (requestId === mempoolRequestId.current) {
+      setMempoolError((error as Error).message);
+    }
   } finally {
-    setMempoolLoading(false);
+    if (requestId === mempoolRequestId.current) {
+      setMempoolLoading(false);
+    }
   }
 }
+
+useEffect(() => {
+  refreshMempool().catch(() => undefined);
+}, []);
 ```
 
-Call `refreshMempool()` during initial setup after the default users and first wallet refresh. Call it after `refresh()` in `handleSend`, `handleFaucet`, and `handleMine`. Do not call it from the wallet-switch callback because the mempool is global and should not reload three times while switching wallets.
+Keep this mount effect separate from default-user and first-wallet initialization so a wallet setup failure cannot prevent the node-wide view from loading. Call `refreshMempool()` after `handleSend`, `handleFaucet`, and `handleMine`; the final Block Explorer integration task will consolidate these post-action refreshes with `Promise.allSettled`. Do not call it from the wallet-switch callback because the mempool is global.
 
 - [ ] **Step 2: Render the view below the UTXO Viewer**
 
@@ -769,6 +805,8 @@ With Bitcoin Core, backend, and frontend running:
 5. Mine one block and click Refresh.
 6. Verify the pending row disappears and transaction history shows confirmation.
 7. Stop Bitcoin Core temporarily, refresh, and verify the UI shows an error instead of crashing.
+8. Verify loading, empty, error, and populated layouts explicitly on desktop and a narrow viewport.
+9. Trigger two refreshes rapidly and verify a slower first response cannot replace the newer snapshot.
 
 - [ ] **Step 5: Commit documentation**
 
@@ -783,9 +821,15 @@ git commit -m "docs: document mempool view usage"
 - [ ] Verbose mempool and decoded transaction RPC calls are covered by tests.
 - [ ] Known app transactions show wallet relationship metadata.
 - [ ] Unknown transactions remain valid with nullable wallet labels.
+- [ ] Both singular `scriptPubKey.address` and legacy `scriptPubKey.addresses` outputs are recognized.
+- [ ] A transaction mined or evicted after the mempool snapshot is skipped without hiding remaining entries.
+- [ ] Multiple known recipient wallets are not collapsed into a misleading single recipient.
 - [ ] Fees and fee rates use exact satoshi/Decimal calculations.
+- [ ] Zero or missing vsize produces a null fee rate.
 - [ ] Empty mempool renders a clean empty state.
 - [ ] Send, faucet, mine, initial load, and manual refresh update the view.
 - [ ] Mining removes confirmed transactions from the mempool view.
+- [ ] Initial global loading is independent of wallet initialization, and stale refreshes cannot overwrite newer snapshots.
+- [ ] Loading, empty, error, and populated states are manually verified.
 - [ ] Backend tests and frontend build pass.
 - [ ] README includes API and web demo instructions.
