@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.schemas import SendTransactionRead, SendTransactionRequest, TransactionRead
+from app.schemas import SendTransactionRead, SendTransactionRequest, TransactionDetailRead, TransactionRead
 from app.services import transactions as transaction_service
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
@@ -11,6 +11,11 @@ router = APIRouter(prefix="/transactions", tags=["transactions"])
 @router.post("/send", response_model=SendTransactionRead, status_code=status.HTTP_201_CREATED)
 def send_transaction(payload: SendTransactionRequest, db: Session = Depends(get_db)):
     return transaction_service.send_transaction(payload, db)
+
+
+@router.get("/detail/{txid}", response_model=TransactionDetailRead)
+def get_transaction_detail(txid: str, db: Session = Depends(get_db)):
+    return transaction_service.get_transaction_detail(txid, db)
 
 
 @router.get("/{wallet_name}", response_model=list[TransactionRead])

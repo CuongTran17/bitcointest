@@ -1,4 +1,5 @@
 from decimal import Decimal
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -88,3 +89,41 @@ class TransactionRead(BaseModel):
     time: int | None = None
     blockhash: str | None = None
     address: str | None = None
+
+
+class TransactionInputRead(BaseModel):
+    txid: str | None = None
+    vout: int | None = None
+    coinbase: str | None = None
+    sequence: int | None = None
+
+
+class TransactionOutputRead(BaseModel):
+    n: int
+    value_btc: str
+    value_sats: int
+    address: str | None = None
+    wallet_name: str | None = None
+    script_type: str | None = None
+
+
+class TransactionDetailRead(BaseModel):
+    txid: str
+    from_wallet: str | None = None
+    to_wallet: str | None = None
+    to_address: str | None = None
+    amount_btc: str | None = None
+    amount_sats: int | None = None
+    confirmations: int
+    status: str
+    blockhash: str | None = None
+    blocktime: int | None = None
+    time: int | None = None
+    size: int | None = None
+    vsize: int | None = None
+    weight: int | None = None
+    fee_btc: str | None = None
+    fee_sats: int | None = None
+    inputs: list[TransactionInputRead]
+    outputs: list[TransactionOutputRead]
+    raw: dict[str, Any]
