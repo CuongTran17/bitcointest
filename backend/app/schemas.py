@@ -127,3 +127,25 @@ class TransactionDetailRead(BaseModel):
     inputs: list[TransactionInputRead]
     outputs: list[TransactionOutputRead]
     raw: dict[str, Any]
+
+
+class UtxoRead(BaseModel):
+    txid: str
+    vout: int
+    address: str | None = None
+    amount_btc: str
+    amount_sats: int
+    confirmations: int
+    spendable: bool
+    solvable: bool
+    safe: bool
+
+
+class UtxoSummaryRead(BaseModel):
+    wallet_name: str
+    utxo_count: int
+    confirmed_count: int
+    unconfirmed_count: int
+    total_amount_btc: str
+    total_amount_sats: int
+    utxos: list[UtxoRead]

@@ -108,3 +108,16 @@ class BitcoinRpcClient:
     def list_transactions(self, wallet: str, count: int = 20) -> list[dict[str, Any]]:
         self.ensure_wallet_loaded(wallet)
         return self.call("listtransactions", ["*", count], wallet=wallet)
+
+    def list_unspent(
+        self,
+        wallet: str,
+        min_conf: int = 0,
+        max_conf: int = 9999999,
+    ) -> list[dict[str, Any]]:
+        self.ensure_wallet_loaded(wallet)
+        return self.call(
+            "listunspent",
+            [min_conf, max_conf, [], True],
+            wallet=wallet,
+        )
