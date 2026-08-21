@@ -7,6 +7,7 @@ import {
   getTransactionDetail,
   getTransactions,
   getUsers,
+  getUtxos,
   mineBlocks,
   sendTransaction,
 } from "./api";
@@ -16,8 +17,9 @@ import { SendPanel } from "./components/SendPanel";
 import { TransactionDetailPanel } from "./components/TransactionDetailPanel";
 import { TransactionHistory } from "./components/TransactionHistory";
 import { UserSwitcher } from "./components/UserSwitcher";
+import { UtxoViewer } from "./components/UtxoViewer";
 import { WalletDashboard } from "./components/WalletDashboard";
-import type { Balance, Transaction, TransactionDetail, User } from "./types";
+import type { Balance, Transaction, TransactionDetail, User, UtxoSummary } from "./types";
 
 export default function App() {
   const [users, setUsers] = useState<User[]>([]);
@@ -30,6 +32,11 @@ export default function App() {
   const [transactionDetail, setTransactionDetail] = useState<TransactionDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const detailRequestId = useRef(0);
+
+  const [utxoSummary, setUtxoSummary] = useState<UtxoSummary | null>(null);
+  const [utxoLoading, setUtxoLoading] = useState(false);
+  const [utxoError, setUtxoError] = useState("");
+  const utxoRequestId = useRef(0);
 
   async function handleSelectTransaction(txid: string) {
     const requestId = ++detailRequestId.current;
@@ -58,6 +65,26 @@ export default function App() {
     setTransactions(await getTransactions(walletName));
   }
 
+  async function refreshUtxos(walletName = selectedWallet) {
+    const requestId = ++utxoRequestId.current;
+    setUtxoLoading(true);
+    setUtxoError("");
+    try {
+      const summary = await getUtxos(walletName);
+      if (requestId === utxoRequestId.current) {
+        setUtxoSummary(summary);
+      }
+    } catch (error) {
+      if (requestId === utxoRequestId.current) {
+        setUtxoError((error as Error).message);
+      }
+    } finally {
+      if (requestId === utxoRequestId.current) {
+        setUtxoLoading(false);
+      }
+    }
+  }
+
   async function ensureDefaultUsers() {
     const currentUsers = await getUsers();
     if (currentUsers.length === 0) {
@@ -69,7 +96,10 @@ export default function App() {
 
   useEffect(() => {
     ensureDefaultUsers()
-      .then(() => refresh("alice"))
+      .then(async () => {
+        await refresh("alice");
+        await refreshUtxos("alice");
+      })
       .catch((error: Error) => setMessage(error.message));
   }, []);
 
@@ -82,18 +112,21 @@ export default function App() {
     await sendTransaction(selectedWallet, toAddress, amountBtc);
     setMessage("Transaction sent. Mine a block to confirm it.");
     await refresh();
+    await refreshUtxos();
   }
 
   async function handleFaucet() {
     await fundFromFaucet(selectedWallet, "10.00000000");
     setMessage(`${selectedWallet} funded from miner faucet.`);
     await refresh();
+    await refreshUtxos();
   }
 
   async function handleMine() {
     await mineBlocks("miner", 1);
     setMessage("Block mined.");
     await refresh();
+    await refreshUtxos();
     if (selectedTxid) {
       handleSelectTransaction(selectedTxid).catch(() => {});
     }
@@ -118,6 +151,7 @@ export default function App() {
           setDetailLoading(false);
           setSelectedWallet(wallet);
           refresh(wallet).catch((error: Error) => setMessage(error.message));
+          refreshUtxos(wallet).catch(() => undefined);
         }}
       />
       <WalletDashboard walletName={selectedWallet} balance={balance} />
@@ -132,6 +166,13 @@ export default function App() {
         onSelectTransaction={handleSelectTransaction}
       />
       <TransactionDetailPanel detail={transactionDetail} loading={detailLoading} />
+      <UtxoViewer
+        walletName={selectedWallet}
+        summary={utxoSummary}
+        loading={utxoLoading}
+        error={utxoError}
+        onRefresh={() => refreshUtxos().catch(() => undefined)}
+      />
     </main>
   );
 }

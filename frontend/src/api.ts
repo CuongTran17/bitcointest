@@ -1,4 +1,4 @@
-import type { Address, Balance, Transaction, TransactionDetail, User } from "./types";
+import type { Address, Balance, Transaction, TransactionDetail, User, UtxoSummary } from "./types";
 
 const API_BASE = "http://127.0.0.1:8000";
 
@@ -59,4 +59,8 @@ export function getTransactions(walletName: string): Promise<Transaction[]> {
 
 export function getTransactionDetail(txid: string): Promise<TransactionDetail> {
   return request<TransactionDetail>(`/transactions/detail/${txid}`);
+}
+
+export function getUtxos(walletName: string): Promise<UtxoSummary> {
+  return request<UtxoSummary>(`/utxos/${walletName}`);
 }

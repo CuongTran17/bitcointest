@@ -70,3 +70,25 @@ export type TransactionDetail = {
   outputs: TransactionOutput[];
   raw: Record<string, unknown>;
 };
+
+export type Utxo = {
+  txid: string;
+  vout: number;
+  address: string | null;
+  amount_btc: string;
+  amount_sats: number;
+  confirmations: number;
+  spendable: boolean;
+  solvable: boolean;
+  safe: boolean;
+};
+
+export type UtxoSummary = {
+  wallet_name: string;
+  utxo_count: number;
+  confirmed_count: number;
+  unconfirmed_count: number;
+  total_amount_btc: string;
+  total_amount_sats: number;
+  utxos: Utxo[];
+};

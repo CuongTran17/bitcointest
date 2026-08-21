@@ -226,6 +226,44 @@ pre {
   padding: 12px;
 }
 
+.utxo-viewer {
+  margin-top: 16px;
+}
+
+.utxo-summary {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.utxo-table-wrap {
+  overflow-x: auto;
+}
+
+.utxo-table {
+  border-collapse: collapse;
+  min-width: 760px;
+  width: 100%;
+}
+
+.utxo-table th,
+.utxo-table td {
+  border-top: 1px solid #edf1f5;
+  padding: 10px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.utxo-address,
+.utxo-txid {
+  max-width: 220px;
+  overflow-wrap: anywhere;
+}
+
+.error {
+  color: #b42318;
+}
+
 @media (max-width: 720px) {
   header,
   .actions,
@@ -238,5 +276,9 @@ pre {
   .detail-columns,
   .detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .utxo-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
