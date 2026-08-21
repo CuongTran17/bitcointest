@@ -1,4 +1,4 @@
-import type { Address, Balance, Transaction, User } from "./types";
+import type { Address, Balance, Transaction, TransactionDetail, User } from "./types";
 
 const API_BASE = "http://127.0.0.1:8000";
 
@@ -55,4 +55,8 @@ export function mineBlocks(walletName = "miner", blockCount = 1) {
 
 export function getTransactions(walletName: string): Promise<Transaction[]> {
   return request<Transaction[]>(`/transactions/${walletName}`);
+}
+
+export function getTransactionDetail(txid: string): Promise<TransactionDetail> {
+  return request<TransactionDetail>(`/transactions/detail/${txid}`);
 }
