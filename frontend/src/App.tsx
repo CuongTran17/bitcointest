@@ -4,6 +4,7 @@ import {
   createUser,
   fundFromFaucet,
   getBalance,
+  getMempool,
   getTransactionDetail,
   getTransactions,
   getUsers,
@@ -11,6 +12,7 @@ import {
   mineBlocks,
   sendTransaction,
 } from "./api";
+import { MempoolView } from "./components/MempoolView";
 import { MineButton } from "./components/MineButton";
 import { ReceivePanel } from "./components/ReceivePanel";
 import { SendPanel } from "./components/SendPanel";
@@ -19,7 +21,7 @@ import { TransactionHistory } from "./components/TransactionHistory";
 import { UserSwitcher } from "./components/UserSwitcher";
 import { UtxoViewer } from "./components/UtxoViewer";
 import { WalletDashboard } from "./components/WalletDashboard";
-import type { Balance, Transaction, TransactionDetail, User, UtxoSummary } from "./types";
+import type { Balance, MempoolSummary, Transaction, TransactionDetail, User, UtxoSummary } from "./types";
 
 export default function App() {
   const [users, setUsers] = useState<User[]>([]);
@@ -37,6 +39,11 @@ export default function App() {
   const [utxoLoading, setUtxoLoading] = useState(false);
   const [utxoError, setUtxoError] = useState("");
   const utxoRequestId = useRef(0);
+
+  const [mempoolSummary, setMempoolSummary] = useState<MempoolSummary | null>(null);
+  const [mempoolLoading, setMempoolLoading] = useState(false);
+  const [mempoolError, setMempoolError] = useState("");
+  const mempoolRequestId = useRef(0);
 
   async function handleSelectTransaction(txid: string) {
     const requestId = ++detailRequestId.current;
@@ -85,6 +92,26 @@ export default function App() {
     }
   }
 
+  async function refreshMempool() {
+    const requestId = ++mempoolRequestId.current;
+    setMempoolLoading(true);
+    setMempoolError("");
+    try {
+      const summary = await getMempool();
+      if (requestId === mempoolRequestId.current) {
+        setMempoolSummary(summary);
+      }
+    } catch (error) {
+      if (requestId === mempoolRequestId.current) {
+        setMempoolError((error as Error).message);
+      }
+    } finally {
+      if (requestId === mempoolRequestId.current) {
+        setMempoolLoading(false);
+      }
+    }
+  }
+
   async function ensureDefaultUsers() {
     const currentUsers = await getUsers();
     if (currentUsers.length === 0) {
@@ -103,6 +130,10 @@ export default function App() {
       .catch((error: Error) => setMessage(error.message));
   }, []);
 
+  useEffect(() => {
+    refreshMempool().catch(() => undefined);
+  }, []);
+
   async function handleAddress() {
     const result = await createAddress(selectedWallet);
     setAddress(result.address);
@@ -113,6 +144,7 @@ export default function App() {
     setMessage("Transaction sent. Mine a block to confirm it.");
     await refresh();
     await refreshUtxos();
+    await refreshMempool();
   }
 
   async function handleFaucet() {
@@ -120,6 +152,7 @@ export default function App() {
     setMessage(`${selectedWallet} funded from miner faucet.`);
     await refresh();
     await refreshUtxos();
+    await refreshMempool();
   }
 
   async function handleMine() {
@@ -127,6 +160,7 @@ export default function App() {
     setMessage("Block mined.");
     await refresh();
     await refreshUtxos();
+    await refreshMempool();
     if (selectedTxid) {
       handleSelectTransaction(selectedTxid).catch(() => {});
     }
@@ -172,6 +206,12 @@ export default function App() {
         loading={utxoLoading}
         error={utxoError}
         onRefresh={() => refreshUtxos().catch(() => undefined)}
+      />
+      <MempoolView
+        summary={mempoolSummary}
+        loading={mempoolLoading}
+        error={mempoolError}
+        onRefresh={() => refreshMempool().catch(() => undefined)}
       />
     </main>
   );

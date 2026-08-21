@@ -226,28 +226,38 @@ pre {
   padding: 12px;
 }
 
-.utxo-viewer {
+.utxo-viewer,
+.mempool-view {
   margin-top: 16px;
 }
 
-.utxo-summary {
+.utxo-summary,
+.mempool-summary {
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.utxo-table-wrap {
+.utxo-table-wrap,
+.mempool-table-wrap {
   overflow-x: auto;
 }
 
-.utxo-table {
+.utxo-table,
+.mempool-table {
   border-collapse: collapse;
   min-width: 760px;
   width: 100%;
 }
 
+.mempool-table {
+  min-width: 940px;
+}
+
 .utxo-table th,
-.utxo-table td {
+.utxo-table td,
+.mempool-table th,
+.mempool-table td {
   border-top: 1px solid #edf1f5;
   padding: 10px 8px;
   text-align: left;
@@ -255,9 +265,16 @@ pre {
 }
 
 .utxo-address,
-.utxo-txid {
+.utxo-txid,
+.mempool-txid,
+.mempool-address {
   max-width: 220px;
   overflow-wrap: anywhere;
+}
+
+.mempool-pending {
+  color: #b45309;
+  font-weight: 700;
 }
 
 .error {
@@ -278,7 +295,8 @@ pre {
     grid-template-columns: 1fr;
   }
 
-  .utxo-summary {
+  .utxo-summary,
+  .mempool-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

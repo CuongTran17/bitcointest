@@ -92,3 +92,35 @@ export type UtxoSummary = {
   total_amount_sats: number;
   utxos: Utxo[];
 };
+
+export type MempoolTransaction = {
+  txid: string;
+  wtxid: string | null;
+  vsize: number;
+  weight: number;
+  fee_btc: string;
+  fee_sats: number;
+  fee_rate_sat_vb: string | null;
+  time: number | null;
+  entry_height: number | null;
+  confirmations: number;
+  from_wallet: string | null;
+  to_wallet: string | null;
+  to_address: string | null;
+  status: "pending";
+  ancestor_count: number;
+  descendant_count: number;
+  depends: string[];
+  spent_by: string[];
+  replaceable: boolean;
+  unbroadcast: boolean;
+  output_addresses: string[];
+};
+
+export type MempoolSummary = {
+  transaction_count: number;
+  total_vsize: number;
+  total_fee_btc: string;
+  total_fee_sats: number;
+  transactions: MempoolTransaction[];
+};
