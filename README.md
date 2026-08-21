@@ -188,12 +188,12 @@ Keep the frontend tab open while using the app.
 7. Select Alice.
 8. Paste Bob's address into `Send`.
 9. Send `2.00000000` BTC.
-10. Select Bob and observe `Alice -> Bob`, `pending`, and `0 confirmations`.
-11. Click `Mine 1 block`.
-12. Refresh or switch wallets and observe `confirmed`, at least `1 confirmation`, and a block hash.
-13. Hover the shortened `txid` value when debugging the transaction.
-14. Click the transaction row in `Recent transactions`.
-15. Review `Inputs`, `Outputs`, `Block`, `Size`, and `Raw JSON`.
+10. Observe the transaction in `Mempool View` before mining, with `Alice -> Bob`, fee, fee rate, and pending status.
+11. Select Bob and observe `Alice -> Bob`, `pending`, and `0 confirmations` in transaction history.
+12. Click `Mine 1 block`.
+13. Refresh `Mempool View` and observe that the transaction has left the mempool.
+14. Observe `confirmed`, at least `1 confirmation`, and a block hash in history.
+15. Click the transaction row in `Recent transactions` to review inputs, outputs, block data, and raw JSON.
 16. Select Bob and inspect `UTXO Viewer` after the transfer is confirmed.
 17. Observe the total amount, satoshi value, txid/vout, confirmations, address, and spendable state.
 18. Select Alice and compare that her change output appears as a different UTXO.
@@ -253,6 +253,32 @@ Fetch detailed transaction data:
 $history = Invoke-RestMethod http://127.0.0.1:8000/transactions/alice
 $txid = $history[0].txid
 Invoke-RestMethod "http://127.0.0.1:8000/transactions/detail/$txid"
+```
+
+Fetch node mempool state:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/mempool
+```
+
+Important Mempool fields:
+
+```json
+{
+  "transaction_count": 1,
+  "total_vsize": 141,
+  "total_fee_btc": "0.00001000",
+  "total_fee_sats": 1000,
+  "transactions": [
+    {
+      "txid": "...",
+      "fee_rate_sat_vb": "7.09219858",
+      "from_wallet": "alice",
+      "to_wallet": "bob",
+      "status": "pending"
+    }
+  ]
+}
 ```
 
 Fetch unspent transaction outputs (UTXOs):
