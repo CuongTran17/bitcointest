@@ -6,7 +6,7 @@ from app import models
 from app.bitcoin_rpc import BitcoinRpcError
 from app.config import Settings
 from app.db import Base, engine
-from app.routers import addresses, faucet, health, mining, transactions, users, wallets
+from app.routers import addresses, faucet, health, mining, transactions, users, utxos, wallets
 
 
 def create_app() -> FastAPI:
@@ -31,6 +31,7 @@ def create_app() -> FastAPI:
     app.include_router(mining.router)
     app.include_router(transactions.router)
     app.include_router(users.router)
+    app.include_router(utxos.router)
     app.include_router(wallets.router)
     return app
 
