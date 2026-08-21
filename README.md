@@ -197,7 +197,9 @@ Keep the frontend tab open while using the app.
 16. Select Bob and inspect `UTXO Viewer` after the transfer is confirmed.
 17. Observe the total amount, satoshi value, txid/vout, confirmations, address, and spendable state.
 18. Select Alice and compare that her change output appears as a different UTXO.
-19. Click `Refresh` in UTXO Viewer after sending or mining to reload the current wallet UTXO set.
+19. Scroll to `Block Explorer`, observe the tip height increase by 1, and select the newly mined block.
+20. Review block details (hash, merkle root, size, weight, difficulty, nonce) and transaction list containing the coinbase and transferred txids.
+21. Search by height (e.g. `101`) or paste a 64-char hash in the lookup input, or navigate with `Prev Block` / `Next Block`.
 
 The detail panel uses Bitcoin Core `getrawtransaction` data. Wallet names appear only when the app has local metadata for that txid or output address. Fee may show `Not available` for transactions where Bitcoin Core does not return fee directly.
 
@@ -302,6 +304,35 @@ Important UTXO fields:
 ```
 
 The viewer includes pending outputs with zero confirmations. A wallet with no UTXOs returns zero totals.
+
+Fetch recent blocks and inspect block detail:
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/blocks?limit=20"
+Invoke-RestMethod "http://127.0.0.1:8000/blocks/101"
+
+$latestBlocks = Invoke-RestMethod "http://127.0.0.1:8000/blocks?limit=1"
+$latestBlocks.blocks[0].hash
+Invoke-RestMethod "http://127.0.0.1:8000/blocks/$($latestBlocks.blocks[0].hash)"
+```
+
+Important Block Detail fields:
+
+```json
+{
+  "height": 101,
+  "hash": "...",
+  "confirmations": 1,
+  "transaction_count": 2,
+  "transaction_ids": [
+    "coinbase_txid...",
+    "transfer_txid..."
+  ],
+  "size": 285,
+  "weight": 1140,
+  "difficulty": "0.000000000465654237"
+}
+```
 
 Look up which local wallet owns an address created by the app:
 
