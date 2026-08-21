@@ -149,3 +149,35 @@ class UtxoSummaryRead(BaseModel):
     total_amount_btc: str
     total_amount_sats: int
     utxos: list[UtxoRead]
+
+
+class MempoolTransactionRead(BaseModel):
+    txid: str
+    wtxid: str | None = None
+    vsize: int
+    weight: int
+    fee_btc: str
+    fee_sats: int
+    fee_rate_sat_vb: str | None = None
+    time: int | None = None
+    entry_height: int | None = None
+    confirmations: int
+    from_wallet: str | None = None
+    to_wallet: str | None = None
+    to_address: str | None = None
+    status: str
+    ancestor_count: int
+    descendant_count: int
+    depends: list[str]
+    spent_by: list[str]
+    replaceable: bool
+    unbroadcast: bool
+    output_addresses: list[str]
+
+
+class MempoolSummaryRead(BaseModel):
+    transaction_count: int
+    total_vsize: int
+    total_fee_btc: str
+    total_fee_sats: int
+    transactions: list[MempoolTransactionRead]

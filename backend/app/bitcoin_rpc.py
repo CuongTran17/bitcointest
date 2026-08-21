@@ -121,3 +121,6 @@ class BitcoinRpcClient:
             [min_conf, max_conf, [], True],
             wallet=wallet,
         )
+
+    def get_raw_mempool(self, verbose: bool = True) -> dict[str, dict[str, Any]]:
+        return self.call("getrawmempool", [verbose])
