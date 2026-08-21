@@ -181,3 +181,34 @@ class MempoolSummaryRead(BaseModel):
     total_fee_btc: str
     total_fee_sats: int
     transactions: list[MempoolTransactionRead]
+
+
+class BlockSummaryRead(BaseModel):
+    height: int
+    hash: str
+    confirmations: int
+    time: int
+    size: int
+    weight: int
+    transaction_count: int
+    previous_hash: str | None = None
+    next_hash: str | None = None
+
+
+class BlockListRead(BaseModel):
+    chain: str
+    tip_height: int
+    tip_hash: str
+    blocks: list[BlockSummaryRead]
+
+
+class BlockDetailRead(BlockSummaryRead):
+    version: int
+    version_hex: str
+    merkle_root: str
+    median_time: int
+    nonce: int
+    bits: str
+    difficulty: str
+    chainwork: str
+    transaction_ids: list[str]

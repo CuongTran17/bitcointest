@@ -80,6 +80,22 @@ class BitcoinRpcClient:
     def get_blockchain_info(self) -> dict[str, Any]:
         return self.call("getblockchaininfo")
 
+    def get_block_hash(self, height: int) -> str:
+        try:
+            return self.call("getblockhash", [height])
+        except BitcoinRpcError as exc:
+            if exc.rpc_code == -8:
+                raise BitcoinRpcError(exc.message, status_code=404, rpc_code=exc.rpc_code) from exc
+            raise
+
+    def get_block(self, block_hash: str, verbosity: int = 1) -> dict[str, Any]:
+        try:
+            return self.call("getblock", [block_hash, verbosity])
+        except BitcoinRpcError as exc:
+            if exc.rpc_code == -5:
+                raise BitcoinRpcError(exc.message, status_code=404, rpc_code=exc.rpc_code) from exc
+            raise
+
     def list_wallets(self) -> list[str]:
         return self.call("listwallets")
 
