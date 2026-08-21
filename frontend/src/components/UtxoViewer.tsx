@@ -27,38 +27,39 @@ export function UtxoViewer({ walletName, summary, loading, error, onRefresh }: P
     <section className="panel utxo-viewer">
       <div className="detail-header">
         <div>
-          <p className="label">Unspent outputs</p>
+          <span className="label">Unspent Outputs</span>
           <h3>UTXO Viewer ({walletLabel(walletName)})</h3>
         </div>
-        <button type="button" onClick={onRefresh} disabled={loading}>
+        <button type="button" className="btn-secondary" onClick={onRefresh} disabled={loading}>
           {loading ? "Refreshing..." : "Refresh"}
         </button>
       </div>
 
       {summary && (
         <div className="utxo-summary">
-          <div>
+          <div className="summary-card">
             <span className="label">Total UTXOs</span>
             <p><strong>{summary.utxo_count}</strong></p>
           </div>
-          <div>
+          <div className="summary-card">
             <span className="label">Confirmed</span>
             <p><strong>{summary.confirmed_count}</strong></p>
           </div>
-          <div>
+          <div className="summary-card">
             <span className="label">Unconfirmed</span>
             <p><strong>{summary.unconfirmed_count}</strong></p>
           </div>
-          <div>
+          <div className="summary-card">
             <span className="label">Total Amount</span>
-            <p><strong>{summary.total_amount_btc} BTC</strong> ({summary.total_amount_sats} sats)</p>
+            <p><strong>{summary.total_amount_btc} BTC</strong></p>
+            <small className="muted">({summary.total_amount_sats} sats)</small>
           </div>
         </div>
       )}
 
-      {loading && <p>Loading UTXOs...</p>}
+      {loading && <p className="muted">Loading UTXOs...</p>}
       {!loading && error && <p className="error">{error}</p>}
-      {!loading && !error && summary && summary.utxos.length === 0 && <p>No unspent outputs.</p>}
+      {!loading && !error && summary && summary.utxos.length === 0 && <p className="muted">No unspent outputs.</p>}
       {!loading && !error && summary && summary.utxos.length > 0 && (
         <div className="utxo-table-wrap">
           <table className="utxo-table">
@@ -86,13 +87,15 @@ export function UtxoViewer({ walletName, summary, loading, error, onRefresh }: P
                     <small className="muted">{utxo.amount_sats} sats</small>
                   </td>
                   <td>
-                    <span className={utxo.confirmations > 0 ? "confirmed" : "pending"}>
+                    <span className={`badge ${utxo.confirmations > 0 ? "badge-confirmed" : "badge-pending"}`}>
                       {utxo.confirmations > 0 ? "confirmed" : "pending"}
                     </span>{" "}
-                    ({utxo.confirmations} conf)
+                    <small className="muted">({utxo.confirmations} conf)</small>
                   </td>
                   <td>
-                    {utxo.spendable ? "spendable" : <span className="muted">watch-only</span>}
+                    <span className={`badge ${utxo.spendable ? "badge-spendable" : "badge-watchonly"}`}>
+                      {utxo.spendable ? "spendable" : "watch-only"}
+                    </span>
                   </td>
                 </tr>
               ))}

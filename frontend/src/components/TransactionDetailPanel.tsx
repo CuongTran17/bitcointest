@@ -33,8 +33,11 @@ export function TransactionDetailPanel({ detail, loading }: Props) {
   if (loading) {
     return (
       <section className="panel transaction-detail">
-        <h3>Transaction detail</h3>
-        <p className="muted">Loading transaction detail...</p>
+        <div>
+          <span className="label">Transaction Detail</span>
+          <h3>Loading...</h3>
+        </div>
+        <p className="muted">Fetching raw transaction data from Bitcoin Core...</p>
       </section>
     );
   }
@@ -47,18 +50,25 @@ export function TransactionDetailPanel({ detail, loading }: Props) {
     <section className="panel transaction-detail">
       <div className="detail-header">
         <div>
-          <p className="label">Transaction detail</p>
+          <span className="label">Transaction Detail</span>
           <h3>
             {walletLabel(detail.from_wallet)} -&gt; {walletLabel(detail.to_wallet)}
           </h3>
         </div>
-        <strong>{detail.amount_btc ?? "Unknown"} BTC</strong>
+        <div>
+          <strong style={{ fontSize: "18px" }}>{detail.amount_btc ?? "Unknown"} BTC</strong>
+        </div>
       </div>
 
       <dl className="detail-grid">
         <div>
           <dt>Status</dt>
-          <dd>{detail.status} · {detail.confirmations} confirmations</dd>
+          <dd>
+            <span className={`badge ${detail.status === "confirmed" ? "badge-confirmed" : "badge-pending"}`}>
+              {detail.status}
+            </span>{" "}
+            ({detail.confirmations} conf)
+          </dd>
         </div>
         <div>
           <dt>Block</dt>
@@ -74,24 +84,26 @@ export function TransactionDetailPanel({ detail, loading }: Props) {
         </div>
         <div>
           <dt>Size</dt>
-          <dd>{detail.size ?? "?"} bytes · vsize {detail.vsize ?? "?"} · weight {detail.weight ?? "?"}</dd>
+          <dd>{detail.size ?? "?"} B · vsize {detail.vsize ?? "?"} · weight {detail.weight ?? "?"}</dd>
         </div>
         <div>
           <dt>Txid</dt>
-          <dd title={detail.txid}>{shortHash(detail.txid)}</dd>
+          <dd title={detail.txid}><code>{shortHash(detail.txid)}</code></dd>
         </div>
       </dl>
 
       <div className="detail-columns">
         <div>
-          <h4>Inputs</h4>
+          <h4>Inputs ({detail.inputs.length})</h4>
           <ul className="detail-list">
             {detail.inputs.map((input, index) => (
               <li key={`${input.txid ?? input.coinbase ?? "input"}-${index}`}>
                 {input.coinbase ? (
-                  <span>coinbase</span>
+                  <span><strong>coinbase</strong></span>
                 ) : (
-                  <span title={input.txid ?? undefined}>{shortHash(input.txid)}:{input.vout ?? "?"}</span>
+                  <span title={input.txid ?? undefined}>
+                    <code>{shortHash(input.txid)}:{input.vout ?? "?"}</code>
+                  </span>
                 )}
               </li>
             ))}
@@ -99,12 +111,14 @@ export function TransactionDetailPanel({ detail, loading }: Props) {
         </div>
 
         <div>
-          <h4>Outputs</h4>
+          <h4>Outputs ({detail.outputs.length})</h4>
           <ul className="detail-list">
             {detail.outputs.map((output) => (
               <li key={output.n}>
-                <strong>{output.value_btc} BTC</strong>
-                <span>{walletLabel(output.wallet_name)}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <strong>{output.value_btc} BTC</strong>
+                  <small className="muted">{walletLabel(output.wallet_name)}</small>
+                </div>
                 <code>{output.address ?? "No address"}</code>
               </li>
             ))}
@@ -113,7 +127,7 @@ export function TransactionDetailPanel({ detail, loading }: Props) {
       </div>
 
       <details>
-        <summary>Raw JSON</summary>
+        <summary>View Raw JSON</summary>
         <pre>{JSON.stringify(detail.raw, null, 2)}</pre>
       </details>
     </section>

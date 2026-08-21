@@ -49,36 +49,36 @@ export function BlockExplorer({
     <section className="panel block-explorer">
       <div className="detail-header">
         <div>
-          <p className="label">Blockchain</p>
+          <span className="label">Blockchain (Node-Wide)</span>
           <h3>Block Explorer</h3>
         </div>
-        <button type="button" onClick={onRefresh} disabled={loading}>
+        <button type="button" className="btn-secondary" onClick={onRefresh} disabled={loading}>
           {loading ? "Refreshing..." : "Refresh"}
         </button>
       </div>
 
       {blockList && (
         <div className="block-explorer-summary">
-          <div>
-            <span className="label">Chain</span>
+          <div className="summary-card">
+            <span className="label">Chain Network</span>
             <p><strong>{blockList.chain}</strong></p>
           </div>
-          <div>
-            <span className="label">Tip Height</span>
+          <div className="summary-card">
+            <span className="label">Current Tip Height</span>
             <p><strong>{blockList.tip_height}</strong></p>
           </div>
-          <div>
+          <div className="summary-card">
             <span className="label">Tip Hash</span>
-            <p title={blockList.tip_hash}><strong>{shortHash(blockList.tip_hash)}</strong></p>
+            <p title={blockList.tip_hash}><code>{shortHash(blockList.tip_hash)}</code></p>
           </div>
         </div>
       )}
 
       <div className="block-explorer-toolbar">
-        <form onSubmit={handleLookupSubmit} style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+        <form className="block-lookup-form" onSubmit={handleLookupSubmit}>
           <input
             type="text"
-            placeholder="Search by block height or 64-char hash"
+            placeholder="Search by block height (e.g. 101) or 64-char hash..."
             value={lookupInput}
             onChange={(e) => setLookupInput(e.target.value)}
             aria-label="Block height or hash"
@@ -88,13 +88,12 @@ export function BlockExplorer({
           </button>
         </form>
 
-        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+        <div className="block-limit-control">
           <label htmlFor="block-limit-select" className="label">Limit:</label>
           <select
             id="block-limit-select"
             value={limit}
             onChange={(e) => onLimitChange(Number(e.target.value))}
-            style={{ padding: "8px", borderRadius: "6px", border: "1px solid #ccd4dc" }}
           >
             <option value={10}>10</option>
             <option value={20}>20</option>
@@ -104,10 +103,10 @@ export function BlockExplorer({
         </div>
       </div>
 
-      {loading && <p>Loading blocks...</p>}
+      {loading && <p className="muted">Loading blocks...</p>}
       {!loading && error && <p className="error">{error}</p>}
       {!loading && !error && blockList && blockList.blocks.length === 0 && (
-        <p>No blocks found.</p>
+        <p className="muted">No blocks found.</p>
       )}
       {!loading && !error && blockList && blockList.blocks.length > 0 && (
         <ul className="block-list">
@@ -117,11 +116,12 @@ export function BlockExplorer({
                 type="button"
                 className={`block-row ${selectedBlock?.hash === block.hash ? "selected" : ""}`}
                 onClick={() => onSelectBlock(String(block.height))}
+                aria-pressed={selectedBlock?.hash === block.hash}
               >
                 <div>
                   <strong>Block #{block.height}</strong>
                   <br />
-                  <small className="muted" title={block.hash}>{shortHash(block.hash)}</small>
+                  <small className="muted" title={block.hash}><code>{shortHash(block.hash)}</code></small>
                 </div>
                 <div>
                   <span>{formatTime(block.time)}</span>
@@ -129,7 +129,7 @@ export function BlockExplorer({
                   <small className="muted">{block.transaction_count} txs · {block.size} bytes</small>
                 </div>
                 <div style={{ textAlign: "right" }}>
-                  <span>{block.confirmations} conf</span>
+                  <span className="badge badge-confirmed">{block.confirmations} conf</span>
                 </div>
               </button>
             </li>
@@ -137,19 +137,20 @@ export function BlockExplorer({
         </ul>
       )}
 
-      {detailLoading && <p>Loading block detail...</p>}
+      {detailLoading && <p className="muted">Loading block detail...</p>}
       {!detailLoading && detailError && <p className="error">{detailError}</p>}
       {!detailLoading && !detailError && selectedBlock && (
-        <div className="block-detail" style={{ marginTop: "20px", borderTop: "2px solid #edf1f5", paddingTop: "16px" }}>
+        <div className="block-detail-section">
           <div className="detail-header">
             <div>
-              <p className="label">Selected block</p>
+              <span className="label">Selected Block</span>
               <h3>Block #{selectedBlock.height}</h3>
             </div>
-            <div style={{ display: "flex", gap: "8px" }}>
+            <div className="block-nav-actions">
               {selectedBlock.previous_hash && (
                 <button
                   type="button"
+                  className="btn-secondary"
                   onClick={() => onSelectBlock(selectedBlock.previous_hash!)}
                   title={selectedBlock.previous_hash}
                 >
@@ -159,6 +160,7 @@ export function BlockExplorer({
               {selectedBlock.next_hash && (
                 <button
                   type="button"
+                  className="btn-secondary"
                   onClick={() => onSelectBlock(selectedBlock.next_hash!)}
                   title={selectedBlock.next_hash}
                 >
@@ -171,14 +173,14 @@ export function BlockExplorer({
           <dl className="block-detail-grid">
             <div>
               <dt>Hash</dt>
-              <dd title={selectedBlock.hash}>{shortHash(selectedBlock.hash)}</dd>
+              <dd title={selectedBlock.hash}><code>{shortHash(selectedBlock.hash)}</code></dd>
             </div>
             <div>
               <dt>Confirmations</dt>
-              <dd>{selectedBlock.confirmations}</dd>
+              <dd><span className="badge badge-confirmed">{selectedBlock.confirmations} conf</span></dd>
             </div>
             <div>
-              <dt>Time</dt>
+              <dt>Block Time</dt>
               <dd>{formatTime(selectedBlock.time)}</dd>
             </div>
             <div>
@@ -187,7 +189,7 @@ export function BlockExplorer({
             </div>
             <div>
               <dt>Size / Weight</dt>
-              <dd>{selectedBlock.size} bytes · {selectedBlock.weight} weight</dd>
+              <dd>{selectedBlock.size} B · wt {selectedBlock.weight}</dd>
             </div>
             <div>
               <dt>Difficulty</dt>
@@ -195,7 +197,7 @@ export function BlockExplorer({
             </div>
             <div>
               <dt>Merkle Root</dt>
-              <dd title={selectedBlock.merkle_root}>{shortHash(selectedBlock.merkle_root)}</dd>
+              <dd title={selectedBlock.merkle_root}><code>{shortHash(selectedBlock.merkle_root)}</code></dd>
             </div>
             <div>
               <dt>Nonce / Bits</dt>
@@ -207,12 +209,13 @@ export function BlockExplorer({
             </div>
           </dl>
 
-          <div style={{ marginTop: "16px" }}>
+          <div>
             <h4>Transactions in Block ({selectedBlock.transaction_ids.length})</h4>
             <ul className="block-transactions">
               {selectedBlock.transaction_ids.map((txid, index) => (
                 <li key={`${txid}-${index}`} className="block-txid" title={txid}>
-                  <code>{index === 0 ? "Coinbase: " : `${index}. `}{shortHash(txid)}</code>
+                  <small className="muted">{index === 0 ? "Coinbase: " : `#${index}: `}</small>
+                  <code>{shortHash(txid)}</code>
                 </li>
               ))}
             </ul>

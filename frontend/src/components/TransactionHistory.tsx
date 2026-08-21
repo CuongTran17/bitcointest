@@ -27,32 +27,49 @@ function confirmationLabel(confirmations: number) {
 export function TransactionHistory({ transactions, selectedTxid, onSelectTransaction }: Props) {
   return (
     <section className="panel history">
-      <h3>Recent transactions</h3>
-      <ul>
-        {transactions.map((tx) => (
-          <li
-            className={`history-item ${tx.status} ${selectedTxid === tx.txid ? "selected" : ""}`}
-            key={`${tx.txid}-${tx.category}-${tx.amount_sats}`}
-          >
-            <button className="history-button" type="button" onClick={() => onSelectTransaction(tx.txid)}>
-              <div className="history-main">
-                <span className="direction">
-                  {walletLabel(tx.from_wallet)} -&gt; {walletLabel(tx.to_wallet)}
-                </span>
-                <small>{tx.category}</small>
-              </div>
-              <strong>{tx.amount_btc} BTC</strong>
-              <small className="history-meta">
-                {tx.status} · {confirmationLabel(tx.confirmations)}
-                {tx.blockhash ? ` · block ${shortTxid(tx.blockhash)}` : ""}
-              </small>
-              <small className="txid" title={tx.txid}>
-                txid: {shortTxid(tx.txid)}
-              </small>
-            </button>
-          </li>
-        ))}
-      </ul>
+      <div>
+        <span className="label">Activity</span>
+        <h3>Recent Transactions</h3>
+      </div>
+      {transactions.length === 0 ? (
+        <p className="muted">No transactions found for this wallet.</p>
+      ) : (
+        <ul>
+          {transactions.map((tx) => (
+            <li
+              className={`history-item ${selectedTxid === tx.txid ? "selected" : ""}`}
+              key={`${tx.txid}-${tx.category}-${tx.amount_sats}`}
+            >
+              <button
+                className="history-button"
+                type="button"
+                onClick={() => onSelectTransaction(tx.txid)}
+                aria-pressed={selectedTxid === tx.txid}
+              >
+                <div className="history-main">
+                  <span className="direction">
+                    {walletLabel(tx.from_wallet)} -&gt; {walletLabel(tx.to_wallet)}
+                  </span>
+                  <small className="muted">{tx.category}</small>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <strong>{tx.amount_btc} BTC</strong>
+                </div>
+                <div className="history-meta">
+                  <span className={`badge ${tx.status === "confirmed" ? "badge-confirmed" : "badge-pending"}`}>
+                    {tx.status}
+                  </span>
+                  <small className="muted">· {confirmationLabel(tx.confirmations)}</small>
+                  {tx.blockhash && <small className="muted">· block {shortTxid(tx.blockhash)}</small>}
+                </div>
+                <div className="txid" title={tx.txid}>
+                  <small className="muted">txid: <code>{shortTxid(tx.txid)}</code></small>
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

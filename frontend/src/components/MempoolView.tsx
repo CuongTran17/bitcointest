@@ -33,39 +33,39 @@ export function MempoolView({ summary, loading, error, onRefresh }: Props) {
     <section className="panel mempool-view">
       <div className="detail-header">
         <div>
-          <p className="label">Node mempool</p>
+          <span className="label">Node Mempool (Global)</span>
           <h3>Mempool View</h3>
         </div>
-        <button type="button" onClick={onRefresh} disabled={loading}>
+        <button type="button" className="btn-secondary" onClick={onRefresh} disabled={loading}>
           {loading ? "Refreshing..." : "Refresh"}
         </button>
       </div>
 
       {summary && (
         <div className="mempool-summary">
-          <div>
-            <span className="label">Transactions</span>
+          <div className="summary-card">
+            <span className="label">Pending Txs</span>
             <p><strong>{summary.transaction_count}</strong></p>
           </div>
-          <div>
+          <div className="summary-card">
             <span className="label">Total vsize</span>
             <p><strong>{summary.total_vsize} vB</strong></p>
           </div>
-          <div>
+          <div className="summary-card">
             <span className="label">Total Fee (BTC)</span>
             <p><strong>{summary.total_fee_btc} BTC</strong></p>
           </div>
-          <div>
+          <div className="summary-card">
             <span className="label">Total Fee (Sats)</span>
             <p><strong>{summary.total_fee_sats} sats</strong></p>
           </div>
         </div>
       )}
 
-      {loading && <p>Loading mempool transactions...</p>}
+      {loading && <p className="muted">Loading mempool transactions...</p>}
       {!loading && error && <p className="error">{error}</p>}
       {!loading && !error && summary && summary.transactions.length === 0 && (
-        <p>No pending transactions in mempool.</p>
+        <p className="muted">No pending transactions in mempool.</p>
       )}
       {!loading && !error && summary && summary.transactions.length > 0 && (
         <div className="mempool-table-wrap">
@@ -94,13 +94,13 @@ export function MempoolView({ summary, loading, error, onRefresh }: Props) {
                       {walletLabel(tx.from_wallet)} -&gt; {walletLabel(tx.to_wallet)}
                     </strong>
                     {tx.to_address && (
-                      <div className="mempool-address">
+                      <div className="mempool-address" style={{ marginTop: "3px" }}>
                         <small className="muted"><code>{tx.to_address}</code></small>
                       </div>
                     )}
                   </td>
                   <td>
-                    <span className="mempool-pending">{tx.status}</span>
+                    <span className="badge badge-pending">{tx.status}</span>
                   </td>
                   <td>
                     <strong>{tx.fee_btc} BTC</strong>
@@ -108,7 +108,7 @@ export function MempoolView({ summary, loading, error, onRefresh }: Props) {
                     <small className="muted">{tx.fee_sats} sats</small>
                   </td>
                   <td>
-                    {tx.fee_rate_sat_vb ? `${tx.fee_rate_sat_vb} sat/vB` : "Not available"}
+                    {tx.fee_rate_sat_vb ? `${tx.fee_rate_sat_vb} sat/vB` : <span className="muted">Not available</span>}
                   </td>
                   <td>
                     {tx.vsize} vB
@@ -119,7 +119,7 @@ export function MempoolView({ summary, loading, error, onRefresh }: Props) {
                     <small>{formatTime(tx.time)}</small>
                   </td>
                   <td>
-                    <small>
+                    <small className="muted">
                       Ancestors: {tx.ancestor_count}
                       <br />
                       Descendants: {tx.descendant_count}

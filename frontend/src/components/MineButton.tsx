@@ -3,5 +3,9 @@ type Props = {
 };
 
 export function MineButton({ onMine }: Props) {
-  return <button onClick={onMine}>Mine 1 block</button>;
+  return (
+    <button type="button" className="btn-secondary" onClick={onMine}>
+      Mine 1 block
+    </button>
+  );
 }

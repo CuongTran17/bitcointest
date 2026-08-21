@@ -235,7 +235,7 @@ export default function App() {
 
   async function handleMine() {
     await mineBlocks("miner", 1);
-    setMessage("Block mined.");
+    setMessage("Block mined successfully.");
     await refreshWalletData();
     await refreshGlobalData(true);
     if (selectedTxid) {
@@ -245,13 +245,19 @@ export default function App() {
 
   return (
     <main className="app">
-      <header>
-        <h1>Local Bitcoin Bank</h1>
-        <div className="actions">
-          <button onClick={handleFaucet}>Faucet 10 BTC</button>
+      <header className="app-header">
+        <div className="brand-block">
+          <h1>Local Bitcoin Bank</h1>
+          <p className="subtitle">Bitcoin Core Regtest Sandbox &amp; Explorer</p>
+        </div>
+        <div className="primary-actions">
+          <button type="button" onClick={handleFaucet}>
+            Faucet 10 BTC
+          </button>
           <MineButton onMine={handleMine} />
         </div>
       </header>
+
       <UserSwitcher
         users={users}
         selectedWallet={selectedWallet}
@@ -264,18 +270,24 @@ export default function App() {
           refreshWalletData(wallet).catch(() => undefined);
         }}
       />
+
       <WalletDashboard walletName={selectedWallet} balance={balance} />
+
       <div className="grid">
         <ReceivePanel address={address} onCreateAddress={handleAddress} />
         <SendPanel onSend={handleSend} />
       </div>
+
       {message && <p className="message">{message}</p>}
+
       <TransactionHistory
         transactions={transactions}
         selectedTxid={selectedTxid}
         onSelectTransaction={handleSelectTransaction}
       />
+
       <TransactionDetailPanel detail={transactionDetail} loading={detailLoading} />
+
       <UtxoViewer
         walletName={selectedWallet}
         summary={utxoSummary}
@@ -283,12 +295,14 @@ export default function App() {
         error={utxoError}
         onRefresh={() => refreshUtxos().catch(() => undefined)}
       />
+
       <MempoolView
         summary={mempoolSummary}
         loading={mempoolLoading}
         error={mempoolError}
         onRefresh={() => refreshMempool().catch(() => undefined)}
       />
+
       <BlockExplorer
         blockList={blockList}
         selectedBlock={selectedBlock}
