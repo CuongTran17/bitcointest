@@ -10,7 +10,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -227,7 +228,8 @@ pre {
 }
 
 .utxo-viewer,
-.mempool-view {
+.mempool-view,
+.block-explorer {
   margin-top: 16px;
 }
 
@@ -236,6 +238,65 @@ pre {
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.block-explorer-toolbar,
+.block-explorer-summary,
+.block-detail-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.block-explorer-toolbar {
+  align-items: center;
+  grid-template-columns: 1fr auto;
+  margin: 16px 0;
+}
+
+.block-explorer-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.block-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+}
+
+.block-row {
+  background: #f8fafc;
+  border: 1px solid #dde3ea;
+  color: #1d2730;
+  display: grid;
+  gap: 4px;
+  grid-template-columns: auto 1fr auto;
+  text-align: left;
+  width: 100%;
+}
+
+.block-row.selected {
+  border-color: #1f6feb;
+}
+
+.block-detail-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
+.block-hash,
+.block-txid {
+  max-width: 280px;
+  overflow-wrap: anywhere;
+}
+
+.block-transactions {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
 }
 
 .utxo-table-wrap,
@@ -296,7 +357,14 @@ pre {
   }
 
   .utxo-summary,
-  .mempool-summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .mempool-summary,
+  .block-explorer-toolbar,
+  .block-explorer-summary,
+  .block-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .block-row {
+    grid-template-columns: 1fr;
   }
 }

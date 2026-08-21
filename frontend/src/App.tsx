@@ -4,6 +4,8 @@ import {
   createUser,
   fundFromFaucet,
   getBalance,
+  getBlockDetail,
+  getBlocks,
   getMempool,
   getTransactionDetail,
   getTransactions,
@@ -12,6 +14,7 @@ import {
   mineBlocks,
   sendTransaction,
 } from "./api";
+import { BlockExplorer } from "./components/BlockExplorer";
 import { MempoolView } from "./components/MempoolView";
 import { MineButton } from "./components/MineButton";
 import { ReceivePanel } from "./components/ReceivePanel";
@@ -21,7 +24,16 @@ import { TransactionHistory } from "./components/TransactionHistory";
 import { UserSwitcher } from "./components/UserSwitcher";
 import { UtxoViewer } from "./components/UtxoViewer";
 import { WalletDashboard } from "./components/WalletDashboard";
-import type { Balance, MempoolSummary, Transaction, TransactionDetail, User, UtxoSummary } from "./types";
+import type {
+  Balance,
+  BlockDetail,
+  BlockList,
+  MempoolSummary,
+  Transaction,
+  TransactionDetail,
+  User,
+  UtxoSummary,
+} from "./types";
 
 export default function App() {
   const [users, setUsers] = useState<User[]>([]);
@@ -44,6 +56,16 @@ export default function App() {
   const [mempoolLoading, setMempoolLoading] = useState(false);
   const [mempoolError, setMempoolError] = useState("");
   const mempoolRequestId = useRef(0);
+
+  const [blockList, setBlockList] = useState<BlockList | null>(null);
+  const [selectedBlock, setSelectedBlock] = useState<BlockDetail | null>(null);
+  const [blockLimit, setBlockLimit] = useState(20);
+  const [blockLoading, setBlockLoading] = useState(false);
+  const [blockDetailLoading, setBlockDetailLoading] = useState(false);
+  const [blockError, setBlockError] = useState("");
+  const [blockDetailError, setBlockDetailError] = useState("");
+  const blockListRequestId = useRef(0);
+  const blockDetailRequestId = useRef(0);
 
   async function handleSelectTransaction(txid: string) {
     const requestId = ++detailRequestId.current;
@@ -112,6 +134,64 @@ export default function App() {
     }
   }
 
+  async function selectBlock(blockRef: string) {
+    const requestId = ++blockDetailRequestId.current;
+    setBlockDetailLoading(true);
+    setBlockDetailError("");
+    try {
+      const detail = await getBlockDetail(blockRef);
+      if (requestId === blockDetailRequestId.current) {
+        setSelectedBlock(detail);
+      }
+    } catch (error) {
+      if (requestId === blockDetailRequestId.current) {
+        setBlockDetailError((error as Error).message);
+      }
+    } finally {
+      if (requestId === blockDetailRequestId.current) {
+        setBlockDetailLoading(false);
+      }
+    }
+  }
+
+  async function refreshBlocks(limit = blockLimit, selectTip = false) {
+    const requestId = ++blockListRequestId.current;
+    setBlockLoading(true);
+    setBlockError("");
+    try {
+      const result = await getBlocks(limit);
+      if (requestId !== blockListRequestId.current) return;
+      setBlockList(result);
+      if ((selectTip || selectedBlock === null) && result.blocks.length > 0) {
+        await selectBlock(String(result.blocks[0].height));
+      } else if (result.blocks.length === 0) {
+        setSelectedBlock(null);
+      }
+    } catch (error) {
+      if (requestId === blockListRequestId.current) {
+        setBlockError((error as Error).message);
+      }
+    } finally {
+      if (requestId === blockListRequestId.current) {
+        setBlockLoading(false);
+      }
+    }
+  }
+
+  async function refreshGlobalData(selectTip = false) {
+    await Promise.allSettled([
+      refreshMempool(),
+      refreshBlocks(blockLimit, selectTip),
+    ]);
+  }
+
+  async function refreshWalletData(walletName = selectedWallet) {
+    await Promise.allSettled([
+      refresh(walletName),
+      refreshUtxos(walletName),
+    ]);
+  }
+
   async function ensureDefaultUsers() {
     const currentUsers = await getUsers();
     if (currentUsers.length === 0) {
@@ -124,14 +204,14 @@ export default function App() {
   useEffect(() => {
     ensureDefaultUsers()
       .then(async () => {
-        await refresh("alice");
-        await refreshUtxos("alice");
+        await refreshWalletData("alice");
       })
       .catch((error: Error) => setMessage(error.message));
   }, []);
 
   useEffect(() => {
     refreshMempool().catch(() => undefined);
+    refreshBlocks(blockLimit, true).catch(() => undefined);
   }, []);
 
   async function handleAddress() {
@@ -142,25 +222,22 @@ export default function App() {
   async function handleSend(toAddress: string, amountBtc: string) {
     await sendTransaction(selectedWallet, toAddress, amountBtc);
     setMessage("Transaction sent. Mine a block to confirm it.");
-    await refresh();
-    await refreshUtxos();
-    await refreshMempool();
+    await refreshWalletData();
+    await refreshGlobalData();
   }
 
   async function handleFaucet() {
     await fundFromFaucet(selectedWallet, "10.00000000");
     setMessage(`${selectedWallet} funded from miner faucet.`);
-    await refresh();
-    await refreshUtxos();
-    await refreshMempool();
+    await refreshWalletData();
+    await refreshGlobalData();
   }
 
   async function handleMine() {
     await mineBlocks("miner", 1);
     setMessage("Block mined.");
-    await refresh();
-    await refreshUtxos();
-    await refreshMempool();
+    await refreshWalletData();
+    await refreshGlobalData(true);
     if (selectedTxid) {
       handleSelectTransaction(selectedTxid).catch(() => {});
     }
@@ -184,8 +261,7 @@ export default function App() {
           setTransactionDetail(null);
           setDetailLoading(false);
           setSelectedWallet(wallet);
-          refresh(wallet).catch((error: Error) => setMessage(error.message));
-          refreshUtxos(wallet).catch(() => undefined);
+          refreshWalletData(wallet).catch(() => undefined);
         }}
       />
       <WalletDashboard walletName={selectedWallet} balance={balance} />
@@ -212,6 +288,21 @@ export default function App() {
         loading={mempoolLoading}
         error={mempoolError}
         onRefresh={() => refreshMempool().catch(() => undefined)}
+      />
+      <BlockExplorer
+        blockList={blockList}
+        selectedBlock={selectedBlock}
+        limit={blockLimit}
+        loading={blockLoading}
+        detailLoading={blockDetailLoading}
+        error={blockError}
+        detailError={blockDetailError}
+        onLimitChange={(nextLimit) => {
+          setBlockLimit(nextLimit);
+          refreshBlocks(nextLimit, false).catch(() => undefined);
+        }}
+        onRefresh={() => refreshBlocks(blockLimit, false).catch(() => undefined)}
+        onSelectBlock={(blockRef) => selectBlock(blockRef).catch(() => undefined)}
       />
     </main>
   );

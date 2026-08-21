@@ -124,3 +124,34 @@ export type MempoolSummary = {
   total_fee_sats: number;
   transactions: MempoolTransaction[];
 };
+
+export type BlockSummary = {
+  height: number;
+  hash: string;
+  confirmations: number;
+  time: number;
+  size: number;
+  weight: number;
+  transaction_count: number;
+  previous_hash: string | null;
+  next_hash: string | null;
+};
+
+export type BlockList = {
+  chain: string;
+  tip_height: number;
+  tip_hash: string;
+  blocks: BlockSummary[];
+};
+
+export type BlockDetail = BlockSummary & {
+  version: number;
+  version_hex: string;
+  merkle_root: string;
+  median_time: number;
+  nonce: number;
+  bits: string;
+  difficulty: string;
+  chainwork: string;
+  transaction_ids: string[];
+};
