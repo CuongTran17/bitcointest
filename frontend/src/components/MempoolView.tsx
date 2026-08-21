@@ -74,6 +74,7 @@ export function MempoolView({ summary, loading, error, onRefresh }: Props) {
               <tr>
                 <th>Txid</th>
                 <th>Transfer</th>
+                <th>Status</th>
                 <th>Fee</th>
                 <th>Fee Rate</th>
                 <th>Size</th>
@@ -97,6 +98,9 @@ export function MempoolView({ summary, loading, error, onRefresh }: Props) {
                         <small className="muted"><code>{tx.to_address}</code></small>
                       </div>
                     )}
+                  </td>
+                  <td>
+                    <span className="mempool-pending">{tx.status}</span>
                   </td>
                   <td>
                     <strong>{tx.fee_btc} BTC</strong>
