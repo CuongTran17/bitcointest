@@ -51,11 +51,20 @@ notepad "$env:APPDATA\Bitcoin\bitcoin.conf"
 Paste this into `bitcoin.conf`:
 
 ```ini
+[regtest]
+txindex=1
+
 regtest=1
 server=1
 rpcuser=bitcoinuser
 rpcpassword=bitcoinpass
 fallbackfee=0.0001
+```
+
+If you previously ran Bitcoin Core without `txindex=1`, perform a one-time reindex:
+
+```powershell
+& "C:\Program Files\Bitcoin\daemon\bitcoind.exe" -regtest -txindex=1 -reindex
 ```
 
 ## 3. Start Bitcoin Core Regtest
@@ -183,6 +192,10 @@ Keep the frontend tab open while using the app.
 11. Click `Mine 1 block`.
 12. Refresh or switch wallets and observe `confirmed`, at least `1 confirmation`, and a block hash.
 13. Hover the shortened `txid` value when debugging the transaction.
+14. Click the transaction row in `Recent transactions`.
+15. Review `Inputs`, `Outputs`, `Block`, `Size`, and `Raw JSON`.
+
+The detail panel uses Bitcoin Core `getrawtransaction` data. Wallet names appear only when the app has local metadata for that txid or output address. Fee may show `Not available` for transactions where Bitcoin Core does not return fee directly.
 
 The app can show `Alice -> Bob` only when Bob's address was generated through this app or through `POST /wallets/bob/address`. If Alice sends to an address that the app has never seen, the transaction is still valid, but the history shows `Unknown address`.
 
@@ -228,6 +241,14 @@ Invoke-RestMethod http://127.0.0.1:8000/wallets/alice/balance
 Invoke-RestMethod http://127.0.0.1:8000/wallets/bob/balance
 Invoke-RestMethod http://127.0.0.1:8000/transactions/alice
 Invoke-RestMethod http://127.0.0.1:8000/transactions/bob
+```
+
+Fetch detailed transaction data:
+
+```powershell
+$history = Invoke-RestMethod http://127.0.0.1:8000/transactions/alice
+$txid = $history[0].txid
+Invoke-RestMethod "http://127.0.0.1:8000/transactions/detail/$txid"
 ```
 
 Look up which local wallet owns an address created by the app:
