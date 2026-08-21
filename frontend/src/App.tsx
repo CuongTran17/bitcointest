@@ -1,21 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createAddress,
   createUser,
   fundFromFaucet,
   getBalance,
+  getTransactionDetail,
   getTransactions,
   getUsers,
   mineBlocks,
-  sendTransaction
+  sendTransaction,
 } from "./api";
 import { MineButton } from "./components/MineButton";
 import { ReceivePanel } from "./components/ReceivePanel";
 import { SendPanel } from "./components/SendPanel";
+import { TransactionDetailPanel } from "./components/TransactionDetailPanel";
 import { TransactionHistory } from "./components/TransactionHistory";
 import { UserSwitcher } from "./components/UserSwitcher";
 import { WalletDashboard } from "./components/WalletDashboard";
-import type { Balance, Transaction, User } from "./types";
+import type { Balance, Transaction, TransactionDetail, User } from "./types";
 
 export default function App() {
   const [users, setUsers] = useState<User[]>([]);
@@ -24,6 +26,31 @@ export default function App() {
   const [address, setAddress] = useState("");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [message, setMessage] = useState("");
+  const [selectedTxid, setSelectedTxid] = useState<string | null>(null);
+  const [transactionDetail, setTransactionDetail] = useState<TransactionDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const detailRequestId = useRef(0);
+
+  async function handleSelectTransaction(txid: string) {
+    const requestId = ++detailRequestId.current;
+    setSelectedTxid(txid);
+    setTransactionDetail(null);
+    setDetailLoading(true);
+    try {
+      const detail = await getTransactionDetail(txid);
+      if (requestId === detailRequestId.current) {
+        setTransactionDetail(detail);
+      }
+    } catch (error) {
+      if (requestId === detailRequestId.current) {
+        setMessage(error instanceof Error ? error.message : "Failed to load transaction detail");
+      }
+    } finally {
+      if (requestId === detailRequestId.current) {
+        setDetailLoading(false);
+      }
+    }
+  }
 
   async function refresh(walletName = selectedWallet) {
     setUsers(await getUsers());
@@ -41,7 +68,9 @@ export default function App() {
   }
 
   useEffect(() => {
-    ensureDefaultUsers().then(() => refresh("alice")).catch((error: Error) => setMessage(error.message));
+    ensureDefaultUsers()
+      .then(() => refresh("alice"))
+      .catch((error: Error) => setMessage(error.message));
   }, []);
 
   async function handleAddress() {
@@ -65,6 +94,9 @@ export default function App() {
     await mineBlocks("miner", 1);
     setMessage("Block mined.");
     await refresh();
+    if (selectedTxid) {
+      handleSelectTransaction(selectedTxid).catch(() => {});
+    }
   }
 
   return (
@@ -80,6 +112,10 @@ export default function App() {
         users={users}
         selectedWallet={selectedWallet}
         onSelect={(wallet) => {
+          detailRequestId.current += 1;
+          setSelectedTxid(null);
+          setTransactionDetail(null);
+          setDetailLoading(false);
           setSelectedWallet(wallet);
           refresh(wallet).catch((error: Error) => setMessage(error.message));
         }}
@@ -90,7 +126,12 @@ export default function App() {
         <SendPanel onSend={handleSend} />
       </div>
       {message && <p className="message">{message}</p>}
-      <TransactionHistory transactions={transactions} />
+      <TransactionHistory
+        transactions={transactions}
+        selectedTxid={selectedTxid}
+        onSelectTransaction={handleSelectTransaction}
+      />
+      <TransactionDetailPanel detail={transactionDetail} loading={detailLoading} />
     </main>
   );
 }

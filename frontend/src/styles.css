@@ -56,6 +56,7 @@ header {
 h1,
 h2,
 h3,
+h4,
 p {
   margin: 0;
 }
@@ -119,12 +120,29 @@ code {
 }
 
 .history li {
-  align-items: center;
   border-top: 1px solid #edf1f5;
+  padding: 0;
+}
+
+.history-button {
+  align-items: center;
+  background: transparent;
+  color: inherit;
   display: grid;
   gap: 4px;
   grid-template-columns: 1fr auto;
-  padding-top: 10px;
+  padding: 10px 0;
+  text-align: left;
+  width: 100%;
+}
+
+.history-button:hover .direction,
+.history-item.selected .direction {
+  text-decoration: underline;
+}
+
+.history-item.selected {
+  background: #f8fafc;
 }
 
 .history-main {
@@ -155,11 +173,70 @@ code {
   overflow-wrap: anywhere;
 }
 
+.transaction-detail {
+  margin-top: 16px;
+}
+
+.detail-header,
+.detail-columns {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.detail-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.detail-grid div,
+.detail-list li {
+  border-top: 1px solid #edf1f5;
+  display: grid;
+  gap: 4px;
+  padding-top: 10px;
+}
+
+dt {
+  color: #637083;
+  font-size: 13px;
+}
+
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.detail-list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+pre {
+  background: #101820;
+  border-radius: 6px;
+  color: #e8eef5;
+  max-height: 360px;
+  overflow: auto;
+  padding: 12px;
+}
+
 @media (max-width: 720px) {
   header,
   .actions,
   .grid {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .detail-header,
+  .detail-columns,
+  .detail-grid {
+    grid-template-columns: 1fr;
   }
 }
